@@ -48,7 +48,7 @@ class Controller(object):
             end_word = start_word
         if not self.move_cursor_to_word(end_word, screen_ocr.CursorPosition.AFTER):
             return False
-        time.sleep(0.05)
+        time.sleep(0.1)
         self._mouse.click_up()
         return True
 
