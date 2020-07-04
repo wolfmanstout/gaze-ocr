@@ -17,4 +17,4 @@ Dragonfly.
    lib/net45/Tobii.Interaction.Net.dll.
 6. Ensure that the files are not blocked (right-click Properties, and if there
    is a "Security" section at the bottom, check the "Unblock" box.)
-7. Provide the path to this directory when constructing an EyeTracker instance.
+7. Provide the path to the DLL directory when constructing an EyeTracker instance.
