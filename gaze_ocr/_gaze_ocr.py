@@ -24,6 +24,7 @@ class Controller(object):
         if self._future and not self._future.done():
             self._future.cancel()
         self._future = self._executor.submit(lambda: self._ocr_reader.read_nearby(gaze_point))
+        self._last_gaze_point = gaze_point
 
     def find_nearest_word_coordinates(self, word, cursor_position=screen_ocr.CursorPosition.MIDDLE):
         if not self._future:
@@ -43,11 +44,19 @@ class Controller(object):
     def select_text(self, start_word, end_word=None):
         if not self.move_cursor_to_word(start_word, screen_ocr.CursorPosition.BEFORE):
             return False
-        self._mouse.click_down()
-        if not end_word:
+        if end_word:
+            # If gaze has significantly moved, look for the end word at the final gaze coordinates.
+            current_gaze_point = self._eye_tracker.get_gaze_point_or_default()
+            threshold = _squared(self._ocr_reader.radius / 2.0)
+            if _distance_squared(current_gaze_point, self._last_gaze_point) > threshold:
+                self.start_reading_nearby()
+        else:
             end_word = start_word
-        if not self.move_cursor_to_word(end_word, screen_ocr.CursorPosition.AFTER):
+        end_coordinates = self.find_nearest_word_coordinates(end_word, screen_ocr.CursorPosition.AFTER)
+        if not end_coordinates:
             return False
+        self._mouse.click_down()
+        self._mouse.move(end_coordinates)
         time.sleep(0.1)
         self._mouse.click_up()
         return True
@@ -77,3 +86,12 @@ class Controller(object):
                             dynamic_end_word = None
                 return outer.select_text(dynamic_start_word, dynamic_end_word)
         return SelectTextAction()
+
+
+def _squared(x):
+    return x * x
+
+
+def _distance_squared(coordinate1, coordinate2):
+    return (_squared(coordinate1[0] - coordinate2[0])
+            + _squared(coordinate1[1] - coordinate2[1]))
