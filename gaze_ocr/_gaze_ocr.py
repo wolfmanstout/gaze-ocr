@@ -2,7 +2,6 @@ import time
 from concurrent import futures
 
 import dragonfly
-import screen_ocr
 
 from . import _dragonfly_wrappers as dragonfly_wrappers
 
@@ -26,13 +25,13 @@ class Controller(object):
         self._future = self._executor.submit(lambda: self._ocr_reader.read_nearby(gaze_point))
         self._last_gaze_point = gaze_point
 
-    def find_nearest_word_coordinates(self, word, cursor_position=screen_ocr.CursorPosition.MIDDLE):
+    def find_nearest_word_coordinates(self, word, cursor_position="middle"):
         if not self._future:
             raise RuntimeError("Call start_reading_nearby() before find_nearest_word_coordinates()")
         screen_contents = self._future.result()
         return screen_contents.find_nearest_word_coordinates(word, cursor_position)
 
-    def move_cursor_to_word(self, word, cursor_position=screen_ocr.CursorPosition.MIDDLE):
+    def move_cursor_to_word(self, word, cursor_position="middle"):
         coordinates = self.find_nearest_word_coordinates(word, cursor_position)
         if coordinates:
             self._mouse.move(coordinates)
@@ -42,7 +41,7 @@ class Controller(object):
             return False
 
     def select_text(self, start_word, end_word=None):
-        if not self.move_cursor_to_word(start_word, screen_ocr.CursorPosition.BEFORE):
+        if not self.move_cursor_to_word(start_word, "before"):
             return False
         if end_word:
             # If gaze has significantly moved, look for the end word at the final gaze coordinates.
@@ -52,7 +51,7 @@ class Controller(object):
                 self.start_reading_nearby()
         else:
             end_word = start_word
-        end_coordinates = self.find_nearest_word_coordinates(end_word, screen_ocr.CursorPosition.AFTER)
+        end_coordinates = self.find_nearest_word_coordinates(end_word, "after")
         if not end_coordinates:
             return False
         self._mouse.click_down()
@@ -61,7 +60,7 @@ class Controller(object):
         self._mouse.click_up()
         return True
 
-    def move_cursor_to_word_action(self, word, cursor_position=screen_ocr.CursorPosition.MIDDLE):
+    def move_cursor_to_word_action(self, word, cursor_position="middle"):
         outer = self
         class MoveCursorToWordAction(dragonfly.ActionBase):
             def _execute(self, data=None):
