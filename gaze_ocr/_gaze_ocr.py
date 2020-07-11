@@ -1,3 +1,4 @@
+import os.path
 import time
 from concurrent import futures
 
@@ -10,32 +11,33 @@ class Controller(object):
     def __init__(self,
                  ocr_reader,
                  eye_tracker,
+                 save_data_directory=None,
                  mouse=dragonfly_wrappers.Mouse()):
-        self._ocr_reader = ocr_reader
-        self._eye_tracker = eye_tracker
-        self._mouse = mouse
+        self.ocr_reader = ocr_reader
+        self.eye_tracker = eye_tracker
+        self.save_data_directory = save_data_directory
+        self.mouse = mouse
         self._executor = futures.ThreadPoolExecutor(max_workers=1)
         self._future = None
 
     def start_reading_nearby(self):
-        gaze_point = self._eye_tracker.get_gaze_point_or_default()
+        gaze_point = self.eye_tracker.get_gaze_point_or_default()
         # Don't enqueue multiple requests.
         if self._future and not self._future.done():
             self._future.cancel()
-        self._future = self._executor.submit(lambda: self._ocr_reader.read_nearby(gaze_point))
-        self._last_gaze_point = gaze_point
+        self._future = self._executor.submit(lambda: self.ocr_reader.read_nearby(gaze_point))
 
-    def find_nearest_word_coordinates(self, word, cursor_position="middle"):
+    def latest_screen_contents(self):
         if not self._future:
-            raise RuntimeError("Call start_reading_nearby() before find_nearest_word_coordinates()")
-        screen_contents = self._future.result()
-        return screen_contents.find_nearest_word_coordinates(word, cursor_position)
+            raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
+        return self._future.result()
 
     def move_cursor_to_word(self, word, cursor_position="middle"):
-        coordinates = self.find_nearest_word_coordinates(word, cursor_position)
+        screen_contents = self.latest_screen_contents()
+        coordinates = screen_contents.find_nearest_word_coordinates(word, cursor_position)
+        self._write_data(screen_contents, word, coordinates)
         if coordinates:
-            self._mouse.move(coordinates)
-            # TODO Save data for OCR
+            self.mouse.move(coordinates)
             return True
         else:
             return False
@@ -45,19 +47,22 @@ class Controller(object):
             return False
         if end_word:
             # If gaze has significantly moved, look for the end word at the final gaze coordinates.
-            current_gaze_point = self._eye_tracker.get_gaze_point_or_default()
-            threshold = _squared(self._ocr_reader.radius / 2.0)
-            if _distance_squared(current_gaze_point, self._last_gaze_point) > threshold:
+            current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
+            previous_gaze_point = self.latest_screen_contents().screen_coordinates
+            if (_distance_squared(current_gaze_point, previous_gaze_point)
+                > _squared(self.ocr_reader.radius / 2.0)):
                 self.start_reading_nearby()
         else:
             end_word = start_word
-        end_coordinates = self.find_nearest_word_coordinates(end_word, "after")
+        screen_contents = self.latest_screen_contents()
+        end_coordinates = screen_contents.find_nearest_word_coordinates(end_word, "after")
+        self._write_data(screen_contents, end_word, end_coordinates)
         if not end_coordinates:
             return False
-        self._mouse.click_down()
-        self._mouse.move(end_coordinates)
+        self.mouse.click_down()
+        self.mouse.move(end_coordinates)
         time.sleep(0.1)
-        self._mouse.click_up()
+        self.mouse.click_up()
         return True
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
@@ -85,6 +90,15 @@ class Controller(object):
                             dynamic_end_word = None
                 return outer.select_text(dynamic_start_word, dynamic_end_word)
         return SelectTextAction()
+
+    def _write_data(self, screen_contents, word, coordinates):
+        if not self.save_data_directory:
+            return
+        file_name_prefix = "{}_{:.2f}".format("success" if coordinates else "failure", time.time())
+        file_path_prefix = os.path.join(self.save_data_directory, file_name_prefix)
+        screen_contents.screenshot.save(file_path_prefix + ".png")
+        with open(file_path_prefix + ".txt", "w") as file:
+            file.write(word)
 
 
 def _squared(x):
