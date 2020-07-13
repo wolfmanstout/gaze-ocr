@@ -6,8 +6,11 @@ Dragonfly.
 
 ## Installation
 
-1. Follow [instructions for installing screen-ocr](https://github.com/wolfmanstout/screen-ocr).
-2. Run `pip install pythonnet`.
+NOTE: This package will eventually be shared on PyPI for easier installation.
+
+1. Follow [instructions for installing
+   screen-ocr](https://github.com/wolfmanstout/screen-ocr).
+2. Install this package (e.g. `pip install -e <path to cloned repository>`).
 3. Download the [latest
    Tobii.Interaction](https://www.nuget.org/packages/Tobii.Interaction/) package
    from NuGet (these instructions have been tested on 0.7.3).
@@ -17,4 +20,7 @@ Dragonfly.
    lib/net45/Tobii.Interaction.Net.dll.
 6. Ensure that the files are not blocked (right-click Properties, and if there
    is a "Security" section at the bottom, check the "Unblock" box.)
-7. Provide the path to the DLL directory when constructing an EyeTracker instance.
+
+## Usage
+
+1. Provide the path to the DLL directory when constructing an EyeTracker instance.
