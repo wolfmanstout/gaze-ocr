@@ -43,6 +43,11 @@ class Controller(object):
             return False
 
     def select_text(self, start_word, end_word=None):
+        # Automatically split up start word if multiple words are provided.
+        if " " in start_word:
+            words = start_word.split()
+            start_word = words[0]
+            end_word = words[-1]
         if not self.move_cursor_to_word(start_word, "before"):
             return False
         if end_word:
