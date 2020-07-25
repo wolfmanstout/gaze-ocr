@@ -6,8 +6,6 @@ Dragonfly. See handsfreecoding.org for more information.
 
 ## Installation
 
-NOTE: This package will eventually be shared on PyPI for easier installation.
-
 1. Follow [instructions for installing
    screen-ocr](https://github.com/wolfmanstout/screen-ocr).
 2. Download the [latest
