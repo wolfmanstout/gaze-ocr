@@ -1,3 +1,5 @@
+"""Library for manipulating on-screen text using gaze tracking and OCR."""
+
 import os.path
 import time
 from concurrent import futures
@@ -8,6 +10,8 @@ from . import _dragonfly_wrappers as dragonfly_wrappers
 
 
 class Controller(object):
+    """Mediates interaction with gaze tracking and OCR."""
+
     def __init__(self,
                  ocr_reader,
                  eye_tracker,
@@ -21,6 +25,7 @@ class Controller(object):
         self._future = None
 
     def start_reading_nearby(self):
+        """Start OCR nearby the gaze point in a background thread."""
         gaze_point = self.eye_tracker.get_gaze_point_or_default()
         # Don't enqueue multiple requests.
         if self._future and not self._future.done():
@@ -28,11 +33,21 @@ class Controller(object):
         self._future = self._executor.submit(lambda: self.ocr_reader.read_nearby(gaze_point))
 
     def latest_screen_contents(self):
+        """Return the ScreenContents of the latest call to start_reading_nearby().
+
+        Blocks until available.
+        """
         if not self._future:
             raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
         return self._future.result()
 
     def move_cursor_to_word(self, word, cursor_position="middle"):
+        """Move the mouse cursor nearby the specified word.
+
+        Arguments:
+        word: The word to search for.
+        cursor_position: "before", "middle", or "after" (relative to the matching word)
+        """
         screen_contents = self.latest_screen_contents()
         coordinates = screen_contents.find_nearest_word_coordinates(word, cursor_position)
         self._write_data(screen_contents, word, coordinates)
@@ -43,8 +58,14 @@ class Controller(object):
             return False
 
     def select_text(self, start_word, end_word=None):
+        """Select a range of onscreen text.
+
+        If only start_word is provided, it can be a word or phrase to select. If
+        end_word is provided, a range from the start word to end word will be
+        selected.
+        """
         # Automatically split up start word if multiple words are provided.
-        if " " in start_word:
+        if " " in start_word and not end_word:
             words = start_word.split()
             start_word = words[0]
             end_word = words[-1]
@@ -71,6 +92,7 @@ class Controller(object):
         return True
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
+        """Return a Dragonfly action for moving the cursor nearby a word."""
         outer = self
         class MoveCursorToWordAction(dragonfly.ActionBase):
             def _execute(self, data=None):
@@ -81,6 +103,7 @@ class Controller(object):
         return MoveCursorToWordAction()
 
     def select_text_action(self, start_word, end_word=None):
+        """Return a Dragonfly action for selecting text."""
         outer = self
         class SelectTextAction(dragonfly.ActionBase):
             def _execute(self, data=None):

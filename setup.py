@@ -14,7 +14,6 @@ setuptools.setup(
     url="https://github.com/wolfmanstout/gaze-ocr",
     packages=["gaze_ocr"],
     install_requires=[
-        # Manually install git+https://github.com/wolfmanstout/screen-ocr.git#egg=screen-ocr until this is in PyPI.
         "screen-ocr",
         "dragonfly2",
         "pythonnet",
