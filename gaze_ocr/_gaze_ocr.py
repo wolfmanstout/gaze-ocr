@@ -24,6 +24,16 @@ class Controller(object):
         self._executor = futures.ThreadPoolExecutor(max_workers=1)
         self._future = None
 
+    def shutdown(self, wait=True):
+        self._executor.shutdown(wait)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.shutdown(wait=True)
+        return False
+
     def start_reading_nearby(self):
         """Start OCR nearby the gaze point in a background thread."""
         gaze_point = self.eye_tracker.get_gaze_point_or_default()
@@ -44,6 +54,8 @@ class Controller(object):
     def move_cursor_to_word(self, word, cursor_position="middle"):
         """Move the mouse cursor nearby the specified word.
 
+        If successful, returns the new cursor coordinates.
+
         Arguments:
         word: The word to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word)
@@ -53,9 +65,9 @@ class Controller(object):
         self._write_data(screen_contents, word, coordinates)
         if coordinates:
             self.mouse.move(coordinates)
-            return True
+            return coordinates
         else:
-            return False
+            return None
 
     def select_text(self, start_word, end_word=None):
         """Select a range of onscreen text.
@@ -69,7 +81,8 @@ class Controller(object):
             words = start_word.split()
             start_word = words[0]
             end_word = words[-1]
-        if not self.move_cursor_to_word(start_word, "before"):
+        start_coordinates = self.move_cursor_to_word(start_word, "before")
+        if not start_coordinates:
             return False
         if end_word:
             # If gaze has significantly moved, look for the end word at the final gaze coordinates.
@@ -83,7 +96,7 @@ class Controller(object):
         screen_contents = self.latest_screen_contents()
         end_coordinates = screen_contents.find_nearest_word_coordinates(end_word, "after")
         self._write_data(screen_contents, end_word, end_coordinates)
-        if not end_coordinates:
+        if not end_coordinates or not self._is_valid_selection(start_coordinates, end_coordinates):
             return False
         self.mouse.click_down()
         self.mouse.move(end_coordinates)
@@ -127,6 +140,20 @@ class Controller(object):
         screen_contents.screenshot.save(file_path_prefix + ".png")
         with open(file_path_prefix + ".txt", "w") as file:
             file.write(word)
+
+    def _is_valid_selection(self, start_coordinates, end_coordinates):
+        epsilon = 5  # pixels
+        (start_x, start_y) = start_coordinates
+        (end_x, end_y) = end_coordinates
+        # Selection goes to previous line.
+        if end_y - start_y < -epsilon:
+            return False
+        # Selection stays on same line.
+        elif end_y - start_y < epsilon:
+            return end_x > start_x
+        # Selection moves to following line.
+        else:
+            return True
 
 
 def _squared(x):
