@@ -67,7 +67,7 @@ class Controller(object):
             self.mouse.move(coordinates)
             return coordinates
         else:
-            return None
+            return False
 
     def select_text(self, start_word, end_word=None):
         """Select a range of onscreen text.
