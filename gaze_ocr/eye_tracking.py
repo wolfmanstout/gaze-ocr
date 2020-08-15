@@ -41,17 +41,22 @@ class EyeTracker(object):
         self._host = None
         self._gaze_point = None
         self._gaze_state = None
+        self._screen_scale = (1.0, 1.0)
         self.is_connected = False
 
     def connect(self):
         if self.is_mock:
             return
         self._host = Host()
+
+        # Connect handlers.
+        screen_bounds_state = self._host.States.CreateScreenBoundsObserver()
+        screen_bounds_state.Changed += self._handle_screen_bounds
+        gaze_state = self._host.States.CreateGazeTrackingObserver()
+        gaze_state.Changed += self._handle_gaze_state
         gaze_points = self._host.Streams.CreateGazePointDataStream()
         action = Action[Double, Double, Double](self._handle_gaze_point)
         gaze_points.GazePoint(action)
-        gaze_state = self._host.States.CreateGazeTrackingObserver()
-        gaze_state.Changed += self._handle_gaze_state
         self.is_connected = True
         print("Eye tracker connected.")
 
@@ -65,14 +70,23 @@ class EyeTracker(object):
         self.is_connected = False
         print("Eye tracker disconnected.")
 
-    def _handle_gaze_point(self, x, y, timestamp):
-        self._gaze_point = (x, y, timestamp)
+    def _handle_screen_bounds(self, sender, state):
+        if not state.IsValid:
+            print("Ignoring invalid screen bounds.")
+            return
+        bounds = state.Value
+        monitor_size = self._windows.get_monitor_size()
+        self._screen_scale = (monitor_size[0] / float(bounds.Width),
+                              monitor_size[1] / float(bounds.Height))
 
     def _handle_gaze_state(self, sender, state):
         if not state.IsValid:
             print("Ignoring invalid gaze state.")
             return
         self._gaze_state = state.Value
+
+    def _handle_gaze_point(self, x, y, timestamp):
+        self._gaze_point = (x, y, timestamp)
 
     def has_gaze_point(self):
         return (not self.is_mock and
@@ -81,7 +95,8 @@ class EyeTracker(object):
 
     def get_gaze_point_or_default(self):
         if self.has_gaze_point():
-            return self._gaze_point[:2]
+            return (self._gaze_point[0] * self._screen_scale[0],
+                    self._gaze_point[1] * self._screen_scale[1])
         else:
             return self._windows.get_foreground_window_center()
 
