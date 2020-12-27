@@ -5,6 +5,9 @@ class Mouse(object):
     def move(self, coordinates):
         dragonfly.Mouse("[{}, {}]".format(*coordinates)).execute()
 
+    def click(self):
+        dragonfly.Mouse("left").execute()
+
     def click_down(self):
         dragonfly.Mouse("left:down").execute()
 
@@ -15,6 +18,18 @@ class Mouse(object):
 class Keyboard(object):
     def type(self, text):
         dragonfly.Text(text.replace("%", "%%")).execute()
+
+    def shift_down(self):
+        dragonfly.Key("shift:down").execute()
+
+    def shift_up(self):
+        dragonfly.Key("shift:up").execute()
+
+    def left(self, n):
+        dragonfly.Key("left:{}".format(n)).execute()
+
+    def right(self, n):
+        dragonfly.Key("right:{}".format(n)).execute()
 
 
 class Windows(object):

@@ -16,11 +16,13 @@ class Controller(object):
                  ocr_reader,
                  eye_tracker,
                  save_data_directory=None,
-                 mouse=dragonfly_wrappers.Mouse()):
+                 mouse=dragonfly_wrappers.Mouse(),
+                 keyboard=dragonfly_wrappers.Keyboard()):
         self.ocr_reader = ocr_reader
         self.eye_tracker = eye_tracker
         self.save_data_directory = save_data_directory
         self.mouse = mouse
+        self.keyboard = keyboard
         self._executor = futures.ThreadPoolExecutor(max_workers=1)
         self._future = None
 
@@ -69,6 +71,41 @@ class Controller(object):
         else:
             return False
 
+    def move_text_cursor_to_word(self, word, cursor_position="middle",
+                                 validate_location_function=None):
+        """Move the mouse cursor nearby the specified word.
+
+        If successful, returns the new cursor coordinates.
+
+        Arguments:
+        word: The word to search for.
+        cursor_position: "before", "middle", or "after" (relative to the matching word).
+        validate_location_function: Given a word location, return whether to proceed with
+                                    cursor movement.
+        """
+        screen_contents = self.latest_screen_contents()
+        word_location = screen_contents.find_nearest_word(word)
+        self._write_data(screen_contents, word, word_location)
+        if (not word_location or
+            (validate_location_function and not validate_location_function(word_location))):
+            return False
+        if cursor_position == "before":
+            self.mouse.move(word_location.start_coordinates)
+            self.mouse.click()
+            if word_location.left_char_offset:
+                self.keyboard.right(word_location.left_char_offset)
+        elif cursor_position == "middle":
+            # Note: if it's helpful, we could change this to position the cursor
+            # in the middle of the word.
+            self.mouse.move(word_location.middle_coordinates)
+            self.mouse.click()
+        if cursor_position == "after":
+            self.mouse.move(word_location.end_coordinates)
+            self.mouse.click()
+            if word_location.right_char_offset:
+                self.keyboard.left(word_location.right_char_offset)
+        return word_location
+
     def select_text(self, start_word, end_word=None):
         """Select a range of onscreen text.
 
@@ -81,8 +118,8 @@ class Controller(object):
             words = start_word.split()
             start_word = words[0]
             end_word = words[-1]
-        start_coordinates = self.move_cursor_to_word(start_word, "before")
-        if not start_coordinates:
+        start_location = self.move_text_cursor_to_word(start_word, "before")
+        if not start_location:
             return False
         if end_word:
             # If gaze has significantly moved, look for the end word at the final gaze coordinates.
@@ -93,16 +130,13 @@ class Controller(object):
                 self.start_reading_nearby()
         else:
             end_word = start_word
-        screen_contents = self.latest_screen_contents()
-        end_coordinates = screen_contents.find_nearest_word_coordinates(end_word, "after")
-        self._write_data(screen_contents, end_word, end_coordinates)
-        if not end_coordinates or not self._is_valid_selection(start_coordinates, end_coordinates):
-            return False
-        self.mouse.click_down()
-        self.mouse.move(end_coordinates)
-        time.sleep(0.1)
-        self.mouse.click_up()
-        return True
+        self.keyboard.shift_down()
+        end_location = self.move_text_cursor_to_word(
+            end_word, "after",
+            lambda location: self._is_valid_selection(start_location.start_coordinates,
+                                                      location.end_coordinates))
+        self.keyboard.shift_up()
+        return end_location
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
         """Return a Dragonfly action for moving the cursor nearby a word."""
@@ -132,10 +166,10 @@ class Controller(object):
                 return outer.select_text(dynamic_start_word, dynamic_end_word)
         return SelectTextAction()
 
-    def _write_data(self, screen_contents, word, coordinates):
+    def _write_data(self, screen_contents, word, word_location):
         if not self.save_data_directory:
             return
-        file_name_prefix = "{}_{:.2f}".format("success" if coordinates else "failure", time.time())
+        file_name_prefix = "{}_{:.2f}".format("success" if word_location else "failure", time.time())
         file_path_prefix = os.path.join(self.save_data_directory, file_name_prefix)
         screen_contents.screenshot.save(file_path_prefix + ".png")
         with open(file_path_prefix + ".txt", "w") as file:
