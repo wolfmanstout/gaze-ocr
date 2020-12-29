@@ -139,7 +139,7 @@ class Controller(object):
         return end_location
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
-        """Return a Dragonfly action for moving the cursor nearby a word."""
+        """Return a Dragonfly action for moving the mouse cursor nearby a word."""
         outer = self
         class MoveCursorToWordAction(dragonfly.ActionBase):
             def _execute(self, data=None):
@@ -148,6 +148,17 @@ class Controller(object):
                     dynamic_word = word % data
                 return outer.move_cursor_to_word(dynamic_word, cursor_position)
         return MoveCursorToWordAction()
+
+    def move_text_cursor_action(self, word, cursor_position="middle"):
+        """Return a dragonfly action for moving the text cursor nearby a word."""
+        outer = self
+        class MoveTextCursorAction(dragonfly.ActionBase):
+            def _execute(self, data=None):
+                dynamic_word = word
+                if data:
+                    dynamic_word = word % data
+                return outer.move_text_cursor_to_word(dynamic_word, cursor_position)
+        return MoveTextCursorAction()
 
     def select_text_action(self, start_word, end_word=None):
         """Return a Dragonfly action for selecting text."""
