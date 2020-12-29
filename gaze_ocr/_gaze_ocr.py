@@ -90,20 +90,36 @@ class Controller(object):
             (validate_location_function and not validate_location_function(word_location))):
             return False
         if cursor_position == "before":
-            self.mouse.move(word_location.start_coordinates)
-            self.mouse.click()
-            if word_location.left_char_offset:
-                self.keyboard.right(word_location.left_char_offset)
+            if (word_location.left_char_offset
+                <= word_location.right_char_offset + len(word_location.text)):
+                self.mouse.move(word_location.start_coordinates)
+                self.mouse.click()
+                if word_location.left_char_offset:
+                    self.keyboard.right(word_location.left_char_offset)
+            else:
+                self.mouse.move(word_location.end_coordinates)
+                self.mouse.click()
+                offset = word_location.right_char_offset + len(word_location.text)
+                if offset:
+                    self.keyboard.left(offset)
         elif cursor_position == "middle":
             # Note: if it's helpful, we could change this to position the cursor
             # in the middle of the word.
             self.mouse.move(word_location.middle_coordinates)
             self.mouse.click()
         if cursor_position == "after":
-            self.mouse.move(word_location.end_coordinates)
-            self.mouse.click()
-            if word_location.right_char_offset:
-                self.keyboard.left(word_location.right_char_offset)
+            if (word_location.right_char_offset
+                <= word_location.left_char_offset + len(word_location.text)):
+                self.mouse.move(word_location.end_coordinates)
+                self.mouse.click()
+                if word_location.right_char_offset:
+                    self.keyboard.left(word_location.right_char_offset)
+            else:
+                self.mouse.move(word_location.start_coordinates)
+                self.mouse.click()
+                offset = word_location.left_char_offset + len(word_location.text)
+                if offset:
+                    self.keyboard.right(offset)
         return word_location
 
     def select_text(self, start_word, end_word=None):
