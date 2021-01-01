@@ -71,7 +71,7 @@ class Controller(object):
         else:
             return False
 
-    def move_text_cursor_to_word(self, word, cursor_position="middle",
+    def move_text_cursor_to_word(self, word, cursor_position="middle", use_nearest=True,
                                  validate_location_function=None):
         """Move the mouse cursor nearby the specified word.
 
@@ -80,6 +80,8 @@ class Controller(object):
         Arguments:
         word: The word to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word).
+        use_nearest: Minimizes cursor movement for subword placement, instead of always
+                     clicking based on cursor_position.
         validate_location_function: Given a word location, return whether to proceed with
                                     cursor movement.
         """
@@ -90,7 +92,8 @@ class Controller(object):
             (validate_location_function and not validate_location_function(word_location))):
             return False
         if cursor_position == "before":
-            if (word_location.left_char_offset
+            if (not use_nearest
+                or word_location.left_char_offset
                 <= word_location.right_char_offset + len(word_location.text)):
                 self.mouse.move(word_location.start_coordinates)
                 self.mouse.click()
@@ -108,7 +111,8 @@ class Controller(object):
             self.mouse.move(word_location.middle_coordinates)
             self.mouse.click()
         if cursor_position == "after":
-            if (word_location.right_char_offset
+            if (not use_nearest
+                or word_location.right_char_offset
                 <= word_location.left_char_offset + len(word_location.text)):
                 self.mouse.move(word_location.end_coordinates)
                 self.mouse.click()
@@ -134,7 +138,8 @@ class Controller(object):
             words = start_word.split()
             start_word = words[0]
             end_word = words[-1]
-        start_location = self.move_text_cursor_to_word(start_word, "before")
+        # Always click before the word to avoid subword selection issues on Windows.
+        start_location = self.move_text_cursor_to_word(start_word, "before", use_nearest=False)
         if not start_location:
             return False
         if end_word:
@@ -147,10 +152,12 @@ class Controller(object):
         else:
             end_word = start_word
         self.keyboard.shift_down()
+        validate_function = lambda location: self._is_valid_selection(start_location.start_coordinates,
+                                                                      location.end_coordinates)
+        # Always click after the word to avoid subword selection issues on Windows.
         end_location = self.move_text_cursor_to_word(
-            end_word, "after",
-            lambda location: self._is_valid_selection(start_location.start_coordinates,
-                                                      location.end_coordinates))
+            end_word, "after", use_nearest=False,
+            validate_location_function=validate_function)
         self.keyboard.shift_up()
         return end_location
 
