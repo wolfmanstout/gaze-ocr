@@ -42,6 +42,7 @@ class EyeTracker(object):
         self._gaze_point = None
         self._gaze_state = None
         self._screen_scale = (1.0, 1.0)
+        self._head_rotation = None
         self.is_connected = False
 
     def connect(self):
@@ -57,6 +58,8 @@ class EyeTracker(object):
         gaze_points = self._host.Streams.CreateGazePointDataStream()
         action = Action[Double, Double, Double](self._handle_gaze_point)
         gaze_points.GazePoint(action)
+        head_pose = self._host.Streams.CreateHeadPoseStream()
+        head_pose.Next += self._handle_head_pose
         self.is_connected = True
         print("Eye tracker connected.")
 
@@ -88,6 +91,12 @@ class EyeTracker(object):
     def _handle_gaze_point(self, x, y, timestamp):
         self._gaze_point = (x, y, timestamp)
 
+    def _handle_head_pose(self, sender, stream_data):
+        pose = stream_data.Data
+        self._head_rotation = (pose.HeadRotation.X,
+                               pose.HeadRotation.Y,
+                               pose.HeadRotation.Z)
+
     def has_gaze_point(self):
         return (not self.is_mock and
                 self._gaze_state == GazeTracking.GazeTracked and
@@ -114,3 +123,6 @@ class EyeTracker(object):
 
     def type_gaze_point(self, format):
         self._keyboard.type(format % self.get_gaze_point_or_default()).execute()
+
+    def get_head_rotation_or_default(self):
+        return self._head_rotation or (0, 0, 0)
