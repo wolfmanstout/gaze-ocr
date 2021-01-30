@@ -1,5 +1,6 @@
 """Tobii eye tracker wrapper."""
 
+import math
 import sys
 
 from . import _dragonfly_wrappers as dragonfly_wrappers
@@ -125,4 +126,7 @@ class EyeTracker(object):
         self._keyboard.type(format % self.get_gaze_point_or_default()).execute()
 
     def get_head_rotation_or_default(self):
-        return self._head_rotation or (0, 0, 0)
+        rotation = self._head_rotation or (0, 0, 0)
+        if math.isnan(rotation[0]):
+            rotation = (0, 0, 0)
+        return rotation
