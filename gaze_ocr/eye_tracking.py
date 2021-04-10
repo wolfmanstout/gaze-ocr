@@ -6,13 +6,57 @@ import sys
 from . import _dragonfly_wrappers as dragonfly_wrappers
 
 
+class TalonEyeTracker(object):
+    def __init__(self):
+        global eye_mouse
+        from talon_plugins import eye_mouse
+        self.mouse = eye_mouse.mouse
+        eye_mouse.sync_tracker()
+        self.is_connected = True
+
+    def connect(self):
+        pass
+    
+    def disconnect(self):
+        pass
+    
+    def has_gaze_point(self):
+        pass
+    
+    def get_gaze_point_or_default(self):
+        if self.mouse.xy_hist:
+            pos = self.mouse.xy_hist[-1]
+            return (pos.x, pos.y)
+        else:
+            return (0, 0)
+
+    def print_gaze_point(self):
+        pass
+    
+    def move_to_gaze_point(self, offset=(0, 0)):
+        pass
+    
+    def type_gaze_point(self, format):
+        pass
+
+    def get_head_rotation_or_default(self):
+        pass
+
 class EyeTracker(object):
     _instance = None
 
     @classmethod
     def get_connected_instance(cls, *args, **kwargs):
         if not cls._instance:
-            cls._instance = cls(*args, **kwargs)
+            try:
+                import talon
+                has_talon = True
+            except:
+                has_talon = False
+            if has_talon:
+                cls._instance = TalonEyeTracker()
+            else:
+                cls._instance = cls(*args, **kwargs)
         if not cls._instance.is_connected:
             cls._instance.connect()
         return cls._instance
