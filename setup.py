@@ -16,7 +16,7 @@ setuptools.setup(
     install_requires=[
         "screen-ocr",
         "dragonfly2",
-        "pythonnet",
+#         "pythonnet",
         'futures; python_version < "3.2"',
     ],
     classifiers=[
