@@ -73,9 +73,9 @@ class Controller(object):
 
     def move_text_cursor_to_word(self, word, cursor_position="middle", use_nearest=True,
                                  validate_location_function=None):
-        """Move the mouse cursor nearby the specified word.
+        """Move the text cursor nearby the specified word.
 
-        If successful, returns the new cursor coordinates.
+        If successful, returns the screen_ocr.WordLocation of the matching word.
 
         Arguments:
         word: The word to search for.
