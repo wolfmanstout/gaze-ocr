@@ -72,7 +72,7 @@ class Controller(object):
             return False
 
     def move_text_cursor_to_word(self, word, cursor_position="middle", use_nearest=True,
-                                 validate_location_function=None):
+                                 validate_location_function=None, include_whitespace=False):
         """Move the text cursor nearby the specified word.
 
         If successful, returns the screen_ocr.WordLocation of the matching word.
@@ -105,6 +105,11 @@ class Controller(object):
                 offset = word_location.right_char_offset + len(word_location.text)
                 if offset:
                     self.keyboard.left(offset)
+            if not word_location.left_char_offset and include_whitespace:
+                # Assume that there is whitespace adjacent to the word. This
+                # will gracefully fail if the word is the first in the
+                # editable text area.
+                self.keyboard.left(1)
         elif cursor_position == "middle":
             # Note: if it's helpful, we could change this to position the cursor
             # in the middle of the word.
@@ -124,14 +129,23 @@ class Controller(object):
                 offset = word_location.left_char_offset + len(word_location.text)
                 if offset:
                     self.keyboard.right(offset)
+            if not word_location.right_char_offset and include_whitespace:
+                # Assume that there is whitespace adjacent to the word. This
+                # will gracefully fail if the word is the last in the
+                # editable text area.
+                self.keyboard.right(1)
         return word_location
 
-    def select_text(self, start_word, end_word=None):
+    def select_text(self, start_word, end_word=None, for_deletion=False):
         """Select a range of onscreen text.
 
         If only start_word is provided, it can be a word or phrase to select. If
         end_word is provided, a range from the start word to end word will be
         selected.
+
+        Arguments:
+        for_deletion: If True, select adjacent whitespace for clean deletion of
+                      the selected text.
         """
         # Automatically split up start word if multiple words are provided.
         if " " in start_word and not end_word:
@@ -139,7 +153,10 @@ class Controller(object):
             start_word = words[0]
             end_word = words[-1]
         # Always click before the word to avoid subword selection issues on Windows.
-        start_location = self.move_text_cursor_to_word(start_word, "before", use_nearest=False)
+        start_location = self.move_text_cursor_to_word(start_word,
+                                                       "before",
+                                                       use_nearest=False,
+                                                       include_whitespace=for_deletion)
         if not start_location:
             return False
         if end_word:
@@ -154,10 +171,12 @@ class Controller(object):
         self.keyboard.shift_down()
         validate_function = lambda location: self._is_valid_selection(start_location.start_coordinates,
                                                                       location.end_coordinates)
+        include_whitespace = for_deletion and start_location.left_char_offset
         # Always click after the word to avoid subword selection issues on Windows.
         end_location = self.move_text_cursor_to_word(
             end_word, "after", use_nearest=False,
-            validate_location_function=validate_function)
+            validate_location_function=validate_function,
+            include_whitespace=include_whitespace)
         self.keyboard.shift_up()
         return end_location
 
@@ -183,7 +202,7 @@ class Controller(object):
                 return outer.move_text_cursor_to_word(dynamic_word, cursor_position)
         return MoveTextCursorAction()
 
-    def select_text_action(self, start_word, end_word=None):
+    def select_text_action(self, start_word, end_word=None, for_deletion=False):
         """Return a Dragonfly action for selecting text."""
         outer = self
         class SelectTextAction(dragonfly.ActionBase):
@@ -197,7 +216,7 @@ class Controller(object):
                             dynamic_end_word = end_word % data
                         except KeyError:
                             dynamic_end_word = None
-                return outer.select_text(dynamic_start_word, dynamic_end_word)
+                return outer.select_text(dynamic_start_word, dynamic_end_word, for_deletion=for_deletion)
         return SelectTextAction()
 
     def _write_data(self, screen_contents, word, word_location):
