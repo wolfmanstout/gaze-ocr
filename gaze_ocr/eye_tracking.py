@@ -97,6 +97,9 @@ class EyeTracker(object):
         self._head_rotation = (pose.HeadRotation.X,
                                pose.HeadRotation.Y,
                                pose.HeadRotation.Z)
+        self._head_position = (pose.HeadPosition.X,
+                               pose.HeadPosition.Y,
+                               pose.HeadPosition.Z)
 
     def has_gaze_point(self):
         return (not self.is_mock and
@@ -130,3 +133,9 @@ class EyeTracker(object):
         if math.isnan(rotation[0]):
             rotation = (0, 0, 0)
         return rotation
+
+    def get_head_position_or_default(self):
+        position = self._head_position or (0, 0, 0)
+        if math.isnan(position[0]):
+            position = (0, 0, 0)
+        return position
