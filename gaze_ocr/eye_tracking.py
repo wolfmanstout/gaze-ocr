@@ -43,6 +43,7 @@ class EyeTracker(object):
         self._gaze_point = None
         self._gaze_state = None
         self._screen_scale = (1.0, 1.0)
+        self._monitor_size = windows.get_monitor_size()
         self._head_rotation = None
         self.is_connected = False
 
@@ -82,6 +83,7 @@ class EyeTracker(object):
         monitor_size = self._windows.get_monitor_size()
         self._screen_scale = (monitor_size[0] / float(bounds.Width),
                               monitor_size[1] / float(bounds.Height))
+        self._monitor_size = monitor_size
 
     def _handle_gaze_state(self, sender, state):
         if not state.IsValid:
@@ -112,6 +114,9 @@ class EyeTracker(object):
                     self._gaze_point[1] * self._screen_scale[1])
         else:
             return self._windows.get_foreground_window_center()
+
+    def get_monitor_size(self):
+        return self._monitor_size
 
     def print_gaze_point(self):
         if not self.has_gaze_point():
