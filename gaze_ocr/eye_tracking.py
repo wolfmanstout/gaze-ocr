@@ -8,11 +8,15 @@ from . import _dragonfly_wrappers as dragonfly_wrappers
 
 class TalonEyeTracker(object):
     def __init__(self):
-        global eye_mouse
-        from talon_plugins import eye_mouse
-        self.mouse = eye_mouse.mouse
-        eye_mouse.sync_tracker()
+        # !!! Using unstable private API that may break at any time !!!
+        global actions, ui
+        from talon import actions, tracking_system, ui
+        tracking_system.register('gaze', self._on_gaze)
+        self._gaze = None
         self.is_connected = True
+
+    def _on_gaze(self, frame):
+        self._gaze = frame.gaze
 
     def connect(self):
         pass
@@ -21,20 +25,25 @@ class TalonEyeTracker(object):
         pass
     
     def has_gaze_point(self):
-        pass
+        return self._gaze
     
     def get_gaze_point_or_default(self):
-        if self.mouse.xy_hist:
-            pos = self.mouse.xy_hist[-1]
-            return (pos.x, pos.y)
-        else:
+        if not self._gaze:
             return (0, 0)
+        rect = ui.main_screen().rect
+        pos = self._gaze
+        pos = rect.pos + pos * rect.size
+        pos = rect.clamp(pos)
+        return (pos.x, pos.y)
 
     def print_gaze_point(self):
         pass
     
     def move_to_gaze_point(self, offset=(0, 0)):
-        pass
+        gaze = self.get_gaze_point_or_default()
+        x = gaze[0] + offset[0]
+        y = gaze[1] + offset[1]
+        actions.mouse_move(x, y)
     
     def type_gaze_point(self, format):
         pass
