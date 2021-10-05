@@ -44,6 +44,12 @@ class Controller(object):
             self._future.cancel()
         self._future = self._executor.submit(lambda: self.ocr_reader.read_nearby(gaze_point))
 
+    def read_nearby(self):
+        """Perform OCR nearby the gaze point in the current thread."""
+        gaze_point = self.eye_tracker.get_gaze_point_or_default()
+        self._future = futures.Future()
+        self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+
     def latest_screen_contents(self):
         """Return the ScreenContents of the latest call to start_reading_nearby().
 

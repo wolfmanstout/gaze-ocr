@@ -51,21 +51,14 @@ class TalonEyeTracker(object):
     def get_head_rotation_or_default(self):
         pass
 
+
 class EyeTracker(object):
     _instance = None
 
     @classmethod
     def get_connected_instance(cls, *args, **kwargs):
         if not cls._instance:
-            try:
-                import talon
-                has_talon = True
-            except:
-                has_talon = False
-            if has_talon:
-                cls._instance = TalonEyeTracker()
-            else:
-                cls._instance = cls(*args, **kwargs)
+            cls._instance = cls(*args, **kwargs)
         if not cls._instance.is_connected:
             cls._instance.connect()
         return cls._instance
