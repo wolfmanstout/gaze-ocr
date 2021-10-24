@@ -1,7 +1,10 @@
 """Tobii eye tracker wrapper."""
 
+import bisect
 import math
 import sys
+
+from collections import deque
 
 from . import _dragonfly_wrappers as dragonfly_wrappers
 
@@ -14,9 +17,14 @@ class TalonEyeTracker(object):
         tracking_system.register('gaze', self._on_gaze)
         self._gaze = None
         self.is_connected = True
+        # Keep approximately 10 seconds of frames on Tobii 5
+        self._queue = deque(maxlen=1000)
+        self._ts_queue = deque(maxlen=1000)
 
     def _on_gaze(self, frame):
         self._gaze = frame.gaze
+        self._queue.append(frame)
+        self._ts_queue.append(frame.ts)
 
     def connect(self):
         pass
@@ -30,9 +38,21 @@ class TalonEyeTracker(object):
     def get_gaze_point_or_default(self):
         if not self._gaze:
             return (0, 0)
+        return self._gaze_to_pixels(self._gaze)
+
+    def get_gaze_point_at_timestamp(self, timestamp):
+        if not self._queue:
+            return (0, 0)
+        frame_index = bisect.bisect_left(self._ts_queue, timestamp)
+        frame = self._queue[frame_index]
+        if abs(frame.ts - timestamp) > 0.1:
+            return (0, 0)
+        return self._gaze_to_pixels(frame.gaze)
+
+    @staticmethod
+    def _gaze_to_pixels(gaze):
         rect = ui.main_screen().rect
-        pos = self._gaze
-        pos = rect.pos + pos * rect.size
+        pos = rect.pos + gaze * rect.size
         pos = rect.clamp(pos)
         return (pos.x, pos.y)
 

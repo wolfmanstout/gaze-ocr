@@ -50,6 +50,12 @@ class Controller(object):
         self._future = futures.Future()
         self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
 
+    def read_nearby_at_timestamp(self, timestamp):
+        """Perform OCR nearby the gaze point at the given timestamp."""
+        gaze_point = self.eye_tracker.get_gaze_point_at_timestamp(timestamp)
+        self._future = futures.Future()
+        self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+
     def latest_screen_contents(self):
         """Return the ScreenContents of the latest call to start_reading_nearby().
 
@@ -59,7 +65,7 @@ class Controller(object):
             raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
         return self._future.result()
 
-    def move_cursor_to_word(self, word, cursor_position="middle"):
+    def move_cursor_to_word(self, word, cursor_position="middle", timestamp=None):
         """Move the mouse cursor nearby the specified word.
 
         If successful, returns the new cursor coordinates.
@@ -68,6 +74,8 @@ class Controller(object):
         word: The word to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word)
         """
+        if timestamp:
+            self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
         coordinates = screen_contents.find_nearest_word_coordinates(word, cursor_position)
         self._write_data(screen_contents, word, coordinates)
@@ -150,7 +158,9 @@ class Controller(object):
                 self.keyboard.right(1)
         return word_location
 
-    def select_text(self, start_word, end_word=None, for_deletion=False):
+    def select_text(self, start_word, end_word=None,
+                    for_deletion=False,
+                    start_timestamp=None, end_timestamp=None):
         """Select a range of onscreen text.
 
         If only start_word is provided, it can be a word or phrase to select. If
@@ -166,6 +176,10 @@ class Controller(object):
             words = start_word.split()
             start_word = words[0]
             end_word = words[-1]
+            if not end_timestamp:
+                end_timestamp = start_timestamp
+        if start_timestamp:
+            self.read_nearby_at_timestamp(start_timestamp)
         # Always click before the word to avoid subword selection issues on Windows.
         start_location = self.move_text_cursor_to_word(start_word,
                                                        "before",
@@ -174,12 +188,15 @@ class Controller(object):
         if not start_location:
             return False
         if end_word:
-            # If gaze has significantly moved, look for the end word at the final gaze coordinates.
-            current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
-            previous_gaze_point = self.latest_screen_contents().screen_coordinates
-            if (_distance_squared(current_gaze_point, previous_gaze_point)
-                > _squared(self.ocr_reader.radius / 2.0)):
-                self.start_reading_nearby()
+            if end_timestamp:
+                self.read_nearby_at_timestamp(end_timestamp)
+            else:
+                # If gaze has significantly moved, look for the end word at the final gaze coordinates.
+                current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
+                previous_gaze_point = self.latest_screen_contents().screen_coordinates
+                if (_distance_squared(current_gaze_point, previous_gaze_point)
+                    > _squared(self.ocr_reader.radius / 2.0)):
+                    self.read_nearby()
         else:
             end_word = start_word
         self.keyboard.shift_down()
