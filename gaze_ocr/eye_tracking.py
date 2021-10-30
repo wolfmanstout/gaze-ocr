@@ -42,10 +42,14 @@ class TalonEyeTracker(object):
 
     def get_gaze_point_at_timestamp(self, timestamp):
         if not self._queue:
+            print("No gaze history available")
             return (0, 0)
         frame_index = bisect.bisect_left(self._ts_queue, timestamp)
+        if frame_index == len(self._queue):
+            frame_index -= 1
         frame = self._queue[frame_index]
         if abs(frame.ts - timestamp) > 0.1:
+            print("No gaze history available at that time")
             return (0, 0)
         return self._gaze_to_pixels(frame.gaze)
 
