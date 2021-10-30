@@ -200,16 +200,20 @@ class Controller(object):
         else:
             end_word = start_word
         self.keyboard.shift_down()
-        validate_function = lambda location: self._is_valid_selection(start_location.start_coordinates,
-                                                                      location.end_coordinates)
-        include_whitespace = for_deletion and start_location.left_char_offset
-        # Always click after the word to avoid subword selection issues on Windows.
-        end_location = self.move_text_cursor_to_word(
-            end_word, "after", use_nearest=False,
-            validate_location_function=validate_function,
-            include_whitespace=include_whitespace)
-        self.keyboard.shift_up()
-        return end_location
+        try:
+            validate_function = lambda location: self._is_valid_selection(start_location.start_coordinates,
+                                                                          location.end_coordinates)
+            include_whitespace = for_deletion and start_location.left_char_offset
+            # Always click after the word to avoid subword selection issues on Windows.
+            end_location = self.move_text_cursor_to_word(
+                end_word, "after", use_nearest=False,
+                validate_location_function=validate_function,
+                include_whitespace=include_whitespace)
+            self.keyboard.shift_up()
+            return end_location
+        except:
+            self.keyboard.shift_up()
+            raise
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
         """Return a Dragonfly action for moving the mouse cursor nearby a word."""
