@@ -49,7 +49,7 @@ class TalonEyeTracker(object):
             frame_index -= 1
         frame = self._queue[frame_index]
         if abs(frame.ts - timestamp) > 0.1:
-            print("No gaze history available at that time")
+            print("No gaze history available at that time: {}. Range: [{}, {}]".format(timestamp, self._ts_queue[0], self._ts_queue[-1]))
             return (0, 0)
         return self._gaze_to_pixels(frame.gaze)
 
