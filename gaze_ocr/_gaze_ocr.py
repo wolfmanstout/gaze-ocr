@@ -86,7 +86,8 @@ class Controller(object):
             return False
 
     def move_text_cursor_to_word(self, word, cursor_position="middle", use_nearest=True,
-                                 validate_location_function=None, include_whitespace=False):
+                                 validate_location_function=None, include_whitespace=False, 
+                                 timestamp=None):
         """Move the text cursor nearby the specified word or phrase.
 
         If successful, returns the screen_ocr.WordLocation of the matching word.
@@ -107,6 +108,8 @@ class Controller(object):
                 word = split[-1]
             elif cursor_position == "middle":
                 raise ValueError("Unable to place the cursor in the middle of multiple words")
+        if timestamp:
+            self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
         word_location = screen_contents.find_nearest_word(word)
         self._write_data(screen_contents, word, word_location)
