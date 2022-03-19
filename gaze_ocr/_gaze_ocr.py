@@ -65,72 +65,75 @@ class Controller(object):
             raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
         return self._future.result()
 
-    def move_cursor_to_word(self, word, cursor_position="middle", timestamp=None):
-        """Move the mouse cursor nearby the specified word.
+    def move_cursor_to_words(self, words, cursor_position="middle", timestamp=None):
+        """Move the mouse cursor nearby the specified word or words.
 
         If successful, returns the new cursor coordinates.
 
         Arguments:
-        word: The word to search for.
+        word: The word or words to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word)
         """
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
-        coordinates = screen_contents.find_nearest_word_coordinates(word, cursor_position)
-        self._write_data(screen_contents, word, coordinates)
-        if coordinates:
+        locations = screen_contents.find_nearest_words(words.split())
+        self._write_data(screen_contents, words, locations)
+        if locations:
+            if cursor_position == "before":
+                coordinates = locations[0].start_coordinates
+            elif cursor_position == "middle":
+                coordinates = (int((locations[0].left + locations[-1].right) / 2),
+                               int((locations[0].top + locations[-1].bottom) / 2))
+            elif cursor_position == "after":
+                coordinates = locations[-1].end_coordinates
+            else:
+                raise ValueError(cursor_position)
             self.mouse.move(coordinates)
             return coordinates
         else:
             return False
 
-    def move_text_cursor_to_word(self, word, cursor_position="middle", use_nearest=True,
-                                 validate_location_function=None, include_whitespace=False, 
-                                 timestamp=None):
+    move_cursor_to_word = move_cursor_to_words
+
+    def move_text_cursor_to_words(self, words, cursor_position="middle", use_nearest=True,
+                                  validate_location_function=None, include_whitespace=False,
+                                  timestamp=None):
         """Move the text cursor nearby the specified word or phrase.
 
-        If successful, returns the screen_ocr.WordLocation of the matching word.
+        If successful, returns list of screen_ocr.WordLocation of the matching words.
 
         Arguments:
         word: The word or phrase to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word).
         use_nearest: Minimizes cursor movement for subword placement, instead of always
                      clicking based on cursor_position.
-        validate_location_function: Given a word location, return whether to proceed with
+        validate_location_function: Given a sequence of word locations, return whether to proceed with
                                     cursor movement.
         """
-        if " " in word:
-            split = word.split()
-            if cursor_position == "before":
-                word = split[0]
-            elif cursor_position == "after":
-                word = split[-1]
-            elif cursor_position == "middle":
-                raise ValueError("Unable to place the cursor in the middle of multiple words")
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
-        word_location = screen_contents.find_nearest_word(word)
-        self._write_data(screen_contents, word, word_location)
-        if (not word_location or
-            (validate_location_function and not validate_location_function(word_location))):
+        locations = screen_contents.find_nearest_words(words.split())
+        self._write_data(screen_contents, words, locations)
+        if (not locations or
+            (validate_location_function and not validate_location_function(locations))):
             return False
         if cursor_position == "before":
             if (not use_nearest
-                or word_location.left_char_offset
-                <= word_location.right_char_offset + len(word_location.text)):
-                self.mouse.move(word_location.start_coordinates)
+                or locations[0].left_char_offset
+                <= locations[0].right_char_offset + len(locations[0].text)):
+                self.mouse.move(locations[0].start_coordinates)
                 self.mouse.click()
-                if word_location.left_char_offset:
-                    self.keyboard.right(word_location.left_char_offset)
+                if locations[0].left_char_offset:
+                    self.keyboard.right(locations[0].left_char_offset)
             else:
-                self.mouse.move(word_location.end_coordinates)
+                self.mouse.move(locations[0].end_coordinates)
                 self.mouse.click()
-                offset = word_location.right_char_offset + len(word_location.text)
+                offset = locations[0].right_char_offset + len(locations[0].text)
                 if offset:
                     self.keyboard.left(offset)
-            if not word_location.left_char_offset and include_whitespace:
+            if not locations[0].left_char_offset and include_whitespace:
                 # Assume that there is whitespace adjacent to the word. This
                 # will gracefully fail if the word is the first in the
                 # editable text area.
@@ -138,30 +141,34 @@ class Controller(object):
         elif cursor_position == "middle":
             # Note: if it's helpful, we could change this to position the cursor
             # in the middle of the word.
-            self.mouse.move(word_location.middle_coordinates)
+            coordinates = (int((locations[0].left + locations[-1].right) / 2),
+                           int((locations[0].top + locations[-1].bottom) / 2))
+            self.mouse.move(coordinates)
             self.mouse.click()
         if cursor_position == "after":
             if (not use_nearest
-                or word_location.right_char_offset
-                <= word_location.left_char_offset + len(word_location.text)):
-                self.mouse.move(word_location.end_coordinates)
+                or locations[-1].right_char_offset
+                <= locations[-1].left_char_offset + len(locations[-1].text)):
+                self.mouse.move(locations[-1].end_coordinates)
                 self.mouse.click()
-                if word_location.right_char_offset:
-                    self.keyboard.left(word_location.right_char_offset)
+                if locations[-1].right_char_offset:
+                    self.keyboard.left(locations[-1].right_char_offset)
             else:
-                self.mouse.move(word_location.start_coordinates)
+                self.mouse.move(locations[-1].start_coordinates)
                 self.mouse.click()
-                offset = word_location.left_char_offset + len(word_location.text)
+                offset = locations[-1].left_char_offset + len(locations[-1].text)
                 if offset:
                     self.keyboard.right(offset)
-            if not word_location.right_char_offset and include_whitespace:
+            if not locations[-1].right_char_offset and include_whitespace:
                 # Assume that there is whitespace adjacent to the word. This
                 # will gracefully fail if the word is the last in the
                 # editable text area.
                 self.keyboard.right(1)
-        return word_location
+        return locations
 
-    def select_text(self, start_word, end_word=None,
+    move_text_cursor_to_word = move_text_cursor_to_words
+
+    def select_text(self, start_words, end_words=None,
                     for_deletion=False,
                     start_timestamp=None, end_timestamp=None):
         """Select a range of onscreen text.
@@ -175,22 +182,16 @@ class Controller(object):
                       the selected text.
         """
         # Automatically split up start word if multiple words are provided.
-        if " " in start_word and not end_word:
-            words = start_word.split()
-            start_word = words[0]
-            end_word = words[-1]
-            if not end_timestamp:
-                end_timestamp = start_timestamp
         if start_timestamp:
             self.read_nearby_at_timestamp(start_timestamp)
         # Always click before the word to avoid subword selection issues on Windows.
-        start_location = self.move_text_cursor_to_word(start_word,
-                                                       "before",
-                                                       use_nearest=False,
-                                                       include_whitespace=for_deletion)
-        if not start_location:
+        start_locations = self.move_text_cursor_to_words(start_words,
+                                                         "before",
+                                                         use_nearest=False,
+                                                         include_whitespace=for_deletion)
+        if not start_locations:
             return False
-        if end_word:
+        if end_words:
             if end_timestamp:
                 self.read_nearby_at_timestamp(end_timestamp)
             else:
@@ -201,19 +202,19 @@ class Controller(object):
                     > _squared(self.ocr_reader.radius / 2.0)):
                     self.read_nearby()
         else:
-            end_word = start_word
+            end_words = start_words
         self.keyboard.shift_down()
         try:
-            validate_function = lambda location: self._is_valid_selection(start_location.start_coordinates,
-                                                                          location.end_coordinates)
-            include_whitespace = for_deletion and start_location.left_char_offset
+            validate_function = lambda location: self._is_valid_selection(start_locations[0].start_coordinates,
+                                                                          location[-1].end_coordinates)
+            include_whitespace = for_deletion and start_locations[0].left_char_offset
             # Always click after the word to avoid subword selection issues on Windows.
-            end_location = self.move_text_cursor_to_word(
-                end_word, "after", use_nearest=False,
+            end_locations = self.move_text_cursor_to_word(
+                end_words, "after", use_nearest=False,
                 validate_location_function=validate_function,
                 include_whitespace=include_whitespace)
             self.keyboard.shift_up()
-            return end_location
+            return end_locations
         except:
             self.keyboard.shift_up()
             raise
@@ -257,10 +258,10 @@ class Controller(object):
                 return outer.select_text(dynamic_start_word, dynamic_end_word, for_deletion=for_deletion)
         return SelectTextAction()
 
-    def _write_data(self, screen_contents, word, word_location):
+    def _write_data(self, screen_contents, word, word_locations):
         if not self.save_data_directory:
             return
-        file_name_prefix = "{}_{:.2f}".format("success" if word_location else "failure", time.time())
+        file_name_prefix = "{}_{:.2f}".format("success" if word_locations else "failure", time.time())
         file_path_prefix = os.path.join(self.save_data_directory, file_name_prefix)
         screen_contents.screenshot.save(file_path_prefix + ".png")
         with open(file_path_prefix + ".txt", "w") as file:
