@@ -77,7 +77,7 @@ class Controller(object):
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
-        locations = screen_contents.find_nearest_words(words.split())
+        locations = screen_contents.find_nearest_words(words)
         self._write_data(screen_contents, words, locations)
         if locations:
             if cursor_position == "before":
@@ -114,7 +114,7 @@ class Controller(object):
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
         screen_contents = self.latest_screen_contents()
-        locations = screen_contents.find_nearest_words(words.split())
+        locations = screen_contents.find_nearest_words(words)
         self._write_data(screen_contents, words, locations)
         if (not locations or
             (validate_location_function and not validate_location_function(locations))):
