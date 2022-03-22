@@ -204,6 +204,8 @@ class Controller(object):
         else:
             end_words = start_words
         self.keyboard.shift_down()
+        # Emacs requires a small sleep in between mouse clicks.
+        time.sleep(0.01)
         try:
             validate_function = lambda location: self._is_valid_selection(start_locations[0].start_coordinates,
                                                                           location[-1].end_coordinates)
