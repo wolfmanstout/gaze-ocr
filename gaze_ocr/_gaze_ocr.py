@@ -65,7 +65,7 @@ class Controller(object):
             raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
         return self._future.result()
 
-    def move_cursor_to_words(self, words, cursor_position="middle", timestamp=None):
+    def move_cursor_to_words(self, words, cursor_position="middle", timestamp=None, click_offset_right=0):
         """Move the mouse cursor nearby the specified word or words.
 
         If successful, returns the new cursor coordinates.
@@ -73,6 +73,7 @@ class Controller(object):
         Arguments:
         word: The word or words to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word)
+        click_offset_right: Adjust the X-coordinate when clicking.
         """
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
@@ -89,7 +90,8 @@ class Controller(object):
                 coordinates = locations[-1].end_coordinates
             else:
                 raise ValueError(cursor_position)
-            self.mouse.move(coordinates)
+            self.mouse.move(self._apply_click_offset(
+                coordinates, click_offset_right))
             return coordinates
         else:
             return False
@@ -98,18 +100,21 @@ class Controller(object):
 
     def move_text_cursor_to_words(self, words, cursor_position="middle", use_nearest=True,
                                   validate_location_function=None, include_whitespace=False,
-                                  timestamp=None):
+                                  timestamp=None, click_offset_right=0):
         """Move the text cursor nearby the specified word or phrase.
 
         If successful, returns list of screen_ocr.WordLocation of the matching words.
 
         Arguments:
-        word: The word or phrase to search for.
+        words: The word or phrase to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word).
         use_nearest: Minimizes cursor movement for subword placement, instead of always
                      clicking based on cursor_position.
         validate_location_function: Given a sequence of word locations, return whether to proceed with
                                     cursor movement.
+        include_whitespace: Include whitespace to the left of the words.
+        timestamp: Use gaze position at the provided timestamp.
+        click_offset_right: Adjust the X-coordinate when clicking.
         """
         if timestamp:
             self.read_nearby_at_timestamp(timestamp)
@@ -123,12 +128,14 @@ class Controller(object):
             if (not use_nearest
                 or locations[0].left_char_offset
                 <= locations[0].right_char_offset + len(locations[0].text)):
-                self.mouse.move(locations[0].start_coordinates)
+                self.mouse.move(self._apply_click_offset(
+                    locations[0].start_coordinates, click_offset_right))
                 self.mouse.click()
                 if locations[0].left_char_offset:
                     self.keyboard.right(locations[0].left_char_offset)
             else:
-                self.mouse.move(locations[0].end_coordinates)
+                self.mouse.move(self._apply_click_offset(
+                    locations[0].end_coordinates, click_offset_right))
                 self.mouse.click()
                 offset = locations[0].right_char_offset + len(locations[0].text)
                 if offset:
@@ -143,18 +150,21 @@ class Controller(object):
             # in the middle of the word.
             coordinates = (int((locations[0].left + locations[-1].right) / 2),
                            int((locations[0].top + locations[-1].bottom) / 2))
-            self.mouse.move(coordinates)
+            self.mouse.move(self._apply_click_offset(
+                coordinates, click_offset_right))
             self.mouse.click()
         if cursor_position == "after":
             if (not use_nearest
                 or locations[-1].right_char_offset
                 <= locations[-1].left_char_offset + len(locations[-1].text)):
-                self.mouse.move(locations[-1].end_coordinates)
+                self.mouse.move(self._apply_click_offset(
+                    locations[-1].end_coordinates, click_offset_right))
                 self.mouse.click()
                 if locations[-1].right_char_offset:
                     self.keyboard.left(locations[-1].right_char_offset)
             else:
-                self.mouse.move(locations[-1].start_coordinates)
+                self.mouse.move(self._apply_click_offset(
+                    locations[-1].start_coordinates, click_offset_right))
                 self.mouse.click()
                 offset = locations[-1].left_char_offset + len(locations[-1].text)
                 if offset:
@@ -170,7 +180,7 @@ class Controller(object):
 
     def select_text(self, start_words, end_words=None,
                     for_deletion=False,
-                    start_timestamp=None, end_timestamp=None):
+                    start_timestamp=None, end_timestamp=None, click_offset_right=0):
         """Select a range of onscreen text.
 
         If only start_word is provided, it can be a word or phrase to select. If
@@ -180,6 +190,7 @@ class Controller(object):
         Arguments:
         for_deletion: If True, select adjacent whitespace for clean deletion of
                       the selected text.
+        click_offset_right: Adjust the X-coordinate when clicking.
         """
         # Automatically split up start word if multiple words are provided.
         if start_timestamp:
@@ -188,7 +199,8 @@ class Controller(object):
         start_locations = self.move_text_cursor_to_words(start_words,
                                                          "before",
                                                          use_nearest=False,
-                                                         include_whitespace=for_deletion)
+                                                         include_whitespace=for_deletion,
+                                                         click_offset_right=click_offset_right)
         if not start_locations:
             return False
         if end_words:
@@ -214,7 +226,8 @@ class Controller(object):
             end_locations = self.move_text_cursor_to_word(
                 end_words, "after", use_nearest=False,
                 validate_location_function=validate_function,
-                include_whitespace=include_whitespace)
+                include_whitespace=include_whitespace,
+                click_offset_right=click_offset_right)
             self.keyboard.shift_up()
             return end_locations
         except:
@@ -260,6 +273,10 @@ class Controller(object):
                 return outer.select_text(dynamic_start_word, dynamic_end_word, for_deletion=for_deletion)
         return SelectTextAction()
 
+    @staticmethod
+    def _apply_click_offset(coordinates, offset_right):
+        return (coordinates[0] + offset_right, coordinates[1])
+    
     def _write_data(self, screen_contents, word, word_locations):
         if not self.save_data_directory:
             return
