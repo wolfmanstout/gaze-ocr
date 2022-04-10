@@ -144,17 +144,19 @@ class Controller(object):
         ):
             return False
         if cursor_position == "before":
-            if not use_nearest or locations[0].left_char_offset <= locations[
-                0
-            ].right_char_offset + len(locations[0].text):
+            distance_from_left = locations[0].left_char_offset
+            distance_from_right = locations[0].right_char_offset + len(
+                locations[0].text
+            )
+            if not use_nearest or distance_from_left <= distance_from_right:
                 self.mouse.move(
                     self._apply_click_offset(
                         locations[0].start_coordinates, click_offset_right
                     )
                 )
                 self.mouse.click()
-                if locations[0].left_char_offset:
-                    self.keyboard.right(locations[0].left_char_offset)
+                if distance_from_left:
+                    self.keyboard.right(distance_from_left)
             else:
                 self.mouse.move(
                     self._apply_click_offset(
@@ -162,10 +164,9 @@ class Controller(object):
                     )
                 )
                 self.mouse.click()
-                offset = locations[0].right_char_offset + len(locations[0].text)
-                if offset:
-                    self.keyboard.left(offset)
-            if not locations[0].left_char_offset and include_whitespace:
+                if distance_from_right:
+                    self.keyboard.left(distance_from_right)
+            if not distance_from_left and include_whitespace:
                 # Assume that there is whitespace adjacent to the word. This
                 # will gracefully fail if the word is the first in the
                 # editable text area.
@@ -180,17 +181,19 @@ class Controller(object):
             self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
             self.mouse.click()
         if cursor_position == "after":
-            if not use_nearest or locations[-1].right_char_offset <= locations[
-                -1
-            ].left_char_offset + len(locations[-1].text):
+            distance_from_right = locations[-1].right_char_offset
+            distance_from_left = locations[-1].left_char_offset + len(
+                locations[-1].text
+            )
+            if not use_nearest or distance_from_right <= distance_from_left:
                 self.mouse.move(
                     self._apply_click_offset(
                         locations[-1].end_coordinates, click_offset_right
                     )
                 )
                 self.mouse.click()
-                if locations[-1].right_char_offset:
-                    self.keyboard.left(locations[-1].right_char_offset)
+                if distance_from_right:
+                    self.keyboard.left(distance_from_right)
             else:
                 self.mouse.move(
                     self._apply_click_offset(
@@ -198,10 +201,9 @@ class Controller(object):
                     )
                 )
                 self.mouse.click()
-                offset = locations[-1].left_char_offset + len(locations[-1].text)
-                if offset:
-                    self.keyboard.right(offset)
-            if not locations[-1].right_char_offset and include_whitespace:
+                if distance_from_left:
+                    self.keyboard.right(distance_from_left)
+            if not distance_from_right and include_whitespace:
                 # Assume that there is whitespace adjacent to the word. This
                 # will gracefully fail if the word is the last in the
                 # editable text area.
@@ -363,6 +365,6 @@ def _squared(x):
 
 
 def _distance_squared(coordinate1, coordinate2):
-    return _squared(coordinate1[0] - coordinate2[0]) + _squared(
-        coordinate1[1] - coordinate2[1]
-    )
+    x_diff = coordinate1[0] - coordinate2[0]
+    y_diff = coordinate1[1] - coordinate2[1]
+    return _squared(x_diff) + _squared(y_diff)
