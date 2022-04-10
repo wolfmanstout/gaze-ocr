@@ -40,15 +40,3 @@ class Keyboard(object):
     def right(self, n=1):
         for _ in range(n):
             actions.key("right")
-
-
-class Windows(object):
-    def get_monitor_size(self):
-        pass
-        # primary = dragonfly.Monitor.get_all_monitors()[0]
-        # return (primary.rectangle.dx, primary.rectangle.dy)
-    
-    def get_foreground_window_center(self):
-        pass
-        # window_position = dragonfly.Window.get_foreground().get_position()
-        # return (window_position.x_center, window_position.y_center)

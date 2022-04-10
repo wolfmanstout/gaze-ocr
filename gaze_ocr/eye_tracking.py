@@ -26,15 +26,9 @@ class TalonEyeTracker(object):
         self._queue.append(frame)
         self._ts_queue.append(frame.ts)
 
-    def connect(self):
-        pass
-    
-    def disconnect(self):
-        pass
-    
     def has_gaze_point(self):
         return self._gaze
-    
+
     def get_gaze_point_or_default(self):
         if not self._gaze:
             return (0, 0)
@@ -61,20 +55,11 @@ class TalonEyeTracker(object):
         pos = rect.clamp(pos)
         return (pos.x, pos.y)
 
-    def print_gaze_point(self):
-        pass
-    
     def move_to_gaze_point(self, offset=(0, 0)):
         gaze = self.get_gaze_point_or_default()
         x = gaze[0] + offset[0]
         y = gaze[1] + offset[1]
         actions.mouse_move(x, y)
-    
-    def type_gaze_point(self, format):
-        pass
-
-    def get_head_rotation_or_default(self):
-        pass
 
 
 class EyeTracker(object):

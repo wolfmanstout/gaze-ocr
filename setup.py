@@ -16,11 +16,9 @@ setuptools.setup(
     install_requires=[
         "screen-ocr",
         "dragonfly2",
-#         "pythonnet",
-        'futures; python_version < "3.2"',
+        "pythonnet",
     ],
     classifiers=[
-        "Programming Language :: Python :: 2",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",

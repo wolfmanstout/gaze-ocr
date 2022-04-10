@@ -44,15 +44,13 @@ class Controller(object):
             self._future.cancel()
         self._future = self._executor.submit(lambda: self.ocr_reader.read_nearby(gaze_point))
 
-    def read_nearby(self):
-        """Perform OCR nearby the gaze point in the current thread."""
-        gaze_point = self.eye_tracker.get_gaze_point_or_default()
-        self._future = futures.Future()
-        self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+    def read_nearby(self, timestamp=None):
+        """Perform OCR nearby the gaze point in the current thread.
 
-    def read_nearby_at_timestamp(self, timestamp):
-        """Perform OCR nearby the gaze point at the given timestamp."""
-        gaze_point = self.eye_tracker.get_gaze_point_at_timestamp(timestamp)
+        Arguments:
+        timestamp: If specified, read nearby the gaze point at the provided timestamp.
+        """
+        gaze_point = self.eye_tracker.get_gaze_point_at_timestamp(timestamp) if timestamp else self.eye_tracker.get_gaze_point_or_default()
         self._future = futures.Future()
         self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
 
@@ -71,30 +69,30 @@ class Controller(object):
         If successful, returns the new cursor coordinates.
 
         Arguments:
-        word: The word or words to search for.
+        words: The word or words to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word)
+        timestamp: If specified, read nearby gaze at the provided timestamp.
         click_offset_right: Adjust the X-coordinate when clicking.
         """
         if timestamp:
-            self.read_nearby_at_timestamp(timestamp)
+            self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
         locations = screen_contents.find_nearest_words(words)
         self._write_data(screen_contents, words, locations)
-        if locations:
-            if cursor_position == "before":
-                coordinates = locations[0].start_coordinates
-            elif cursor_position == "middle":
-                coordinates = (int((locations[0].left + locations[-1].right) / 2),
-                               int((locations[0].top + locations[-1].bottom) / 2))
-            elif cursor_position == "after":
-                coordinates = locations[-1].end_coordinates
-            else:
-                raise ValueError(cursor_position)
-            self.mouse.move(self._apply_click_offset(
-                coordinates, click_offset_right))
-            return coordinates
-        else:
+        if not locations:
             return False
+        if cursor_position == "before":
+            coordinates = locations[0].start_coordinates
+        elif cursor_position == "middle":
+            coordinates = (int((locations[0].left + locations[-1].right) / 2),
+                            int((locations[0].top + locations[-1].bottom) / 2))
+        elif cursor_position == "after":
+            coordinates = locations[-1].end_coordinates
+        else:
+            raise ValueError(cursor_position)
+        self.mouse.move(self._apply_click_offset(
+            coordinates, click_offset_right))
+        return coordinates
 
     move_cursor_to_word = move_cursor_to_words
 
@@ -117,7 +115,7 @@ class Controller(object):
         click_offset_right: Adjust the X-coordinate when clicking.
         """
         if timestamp:
-            self.read_nearby_at_timestamp(timestamp)
+            self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
         locations = screen_contents.find_nearest_words(words)
         self._write_data(screen_contents, words, locations)
@@ -180,24 +178,29 @@ class Controller(object):
 
     def select_text(self, start_words, end_words=None,
                     for_deletion=False,
-                    start_timestamp=None, end_timestamp=None, click_offset_right=0):
+                    start_timestamp=None, end_timestamp=None, click_offset_right=0,
+                    after_start=False, before_end=False):
         """Select a range of onscreen text.
 
-        If only start_word is provided, it can be a word or phrase to select. If
-        end_word is provided, a range from the start word to end word will be
+        If only start_words is provided, the full word or phrase is selected. If
+        end_word is provided, a range from the start words to end words will be
         selected.
 
         Arguments:
         for_deletion: If True, select adjacent whitespace for clean deletion of
                       the selected text.
+        start_timestamp: If specified, read start nearby gaze at the provided timestamp.
+        end_timestamp: If specified, read end nearby gaze at the provided timestamp.
         click_offset_right: Adjust the X-coordinate when clicking.
+        after_start: If true, begin selection after the start word.
+        before_end: If true, end selection before the end word.
         """
         # Automatically split up start word if multiple words are provided.
         if start_timestamp:
-            self.read_nearby_at_timestamp(start_timestamp)
+            self.read_nearby(start_timestamp)
         # Always click before the word to avoid subword selection issues on Windows.
         start_locations = self.move_text_cursor_to_words(start_words,
-                                                         "before",
+                                                         "after" if after_start else "before",
                                                          use_nearest=False,
                                                          include_whitespace=for_deletion,
                                                          click_offset_right=click_offset_right)
@@ -205,7 +208,7 @@ class Controller(object):
             return False
         if end_words:
             if end_timestamp:
-                self.read_nearby_at_timestamp(end_timestamp)
+                self.read_nearby(end_timestamp)
             else:
                 # If gaze has significantly moved, look for the end word at the final gaze coordinates.
                 current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
@@ -221,18 +224,14 @@ class Controller(object):
         try:
             validate_function = lambda location: self._is_valid_selection(start_locations[0].start_coordinates,
                                                                           location[-1].end_coordinates)
-            include_whitespace = for_deletion and start_locations[0].left_char_offset
             # Always click after the word to avoid subword selection issues on Windows.
-            end_locations = self.move_text_cursor_to_word(
-                end_words, "after", use_nearest=False,
+            return self.move_text_cursor_to_word(
+                end_words, "before" if before_end else "after", use_nearest=False,
                 validate_location_function=validate_function,
-                include_whitespace=include_whitespace,
+                include_whitespace=False,
                 click_offset_right=click_offset_right)
+        finally:
             self.keyboard.shift_up()
-            return end_locations
-        except:
-            self.keyboard.shift_up()
-            raise
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
         """Return a Dragonfly action for moving the mouse cursor nearby a word."""
@@ -276,7 +275,7 @@ class Controller(object):
     @staticmethod
     def _apply_click_offset(coordinates, offset_right):
         return (coordinates[0] + offset_right, coordinates[1])
-    
+
     def _write_data(self, screen_contents, word, word_locations):
         if not self.save_data_directory:
             return
