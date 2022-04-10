@@ -12,12 +12,14 @@ from . import _dragonfly_wrappers as dragonfly_wrappers
 class Controller(object):
     """Mediates interaction with gaze tracking and OCR."""
 
-    def __init__(self,
-                 ocr_reader,
-                 eye_tracker,
-                 save_data_directory=None,
-                 mouse=dragonfly_wrappers.Mouse(),
-                 keyboard=dragonfly_wrappers.Keyboard()):
+    def __init__(
+        self,
+        ocr_reader,
+        eye_tracker,
+        save_data_directory=None,
+        mouse=dragonfly_wrappers.Mouse(),
+        keyboard=dragonfly_wrappers.Keyboard(),
+    ):
         self.ocr_reader = ocr_reader
         self.eye_tracker = eye_tracker
         self.save_data_directory = save_data_directory
@@ -42,7 +44,9 @@ class Controller(object):
         # Don't enqueue multiple requests.
         if self._future and not self._future.done():
             self._future.cancel()
-        self._future = self._executor.submit(lambda: self.ocr_reader.read_nearby(gaze_point))
+        self._future = self._executor.submit(
+            lambda: self.ocr_reader.read_nearby(gaze_point)
+        )
 
     def read_nearby(self, timestamp=None):
         """Perform OCR nearby the gaze point in the current thread.
@@ -50,7 +54,11 @@ class Controller(object):
         Arguments:
         timestamp: If specified, read nearby the gaze point at the provided timestamp.
         """
-        gaze_point = self.eye_tracker.get_gaze_point_at_timestamp(timestamp) if timestamp else self.eye_tracker.get_gaze_point_or_default()
+        gaze_point = (
+            self.eye_tracker.get_gaze_point_at_timestamp(timestamp)
+            if timestamp
+            else self.eye_tracker.get_gaze_point_or_default()
+        )
         self._future = futures.Future()
         self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
 
@@ -60,10 +68,14 @@ class Controller(object):
         Blocks until available.
         """
         if not self._future:
-            raise RuntimeError("Call start_reading_nearby() before latest_screen_contents()")
+            raise RuntimeError(
+                "Call start_reading_nearby() before latest_screen_contents()"
+            )
         return self._future.result()
 
-    def move_cursor_to_words(self, words, cursor_position="middle", timestamp=None, click_offset_right=0):
+    def move_cursor_to_words(
+        self, words, cursor_position="middle", timestamp=None, click_offset_right=0
+    ):
         """Move the mouse cursor nearby the specified word or words.
 
         If successful, returns the new cursor coordinates.
@@ -84,21 +96,29 @@ class Controller(object):
         if cursor_position == "before":
             coordinates = locations[0].start_coordinates
         elif cursor_position == "middle":
-            coordinates = (int((locations[0].left + locations[-1].right) / 2),
-                            int((locations[0].top + locations[-1].bottom) / 2))
+            coordinates = (
+                int((locations[0].left + locations[-1].right) / 2),
+                int((locations[0].top + locations[-1].bottom) / 2),
+            )
         elif cursor_position == "after":
             coordinates = locations[-1].end_coordinates
         else:
             raise ValueError(cursor_position)
-        self.mouse.move(self._apply_click_offset(
-            coordinates, click_offset_right))
+        self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
         return coordinates
 
     move_cursor_to_word = move_cursor_to_words
 
-    def move_text_cursor_to_words(self, words, cursor_position="middle", use_nearest=True,
-                                  validate_location_function=None, include_whitespace=False,
-                                  timestamp=None, click_offset_right=0):
+    def move_text_cursor_to_words(
+        self,
+        words,
+        cursor_position="middle",
+        use_nearest=True,
+        validate_location_function=None,
+        include_whitespace=False,
+        timestamp=None,
+        click_offset_right=0,
+    ):
         """Move the text cursor nearby the specified word or phrase.
 
         If successful, returns list of screen_ocr.WordLocation of the matching words.
@@ -119,21 +139,28 @@ class Controller(object):
         screen_contents = self.latest_screen_contents()
         locations = screen_contents.find_nearest_words(words)
         self._write_data(screen_contents, words, locations)
-        if (not locations or
-            (validate_location_function and not validate_location_function(locations))):
+        if not locations or (
+            validate_location_function and not validate_location_function(locations)
+        ):
             return False
         if cursor_position == "before":
-            if (not use_nearest
-                or locations[0].left_char_offset
-                <= locations[0].right_char_offset + len(locations[0].text)):
-                self.mouse.move(self._apply_click_offset(
-                    locations[0].start_coordinates, click_offset_right))
+            if not use_nearest or locations[0].left_char_offset <= locations[
+                0
+            ].right_char_offset + len(locations[0].text):
+                self.mouse.move(
+                    self._apply_click_offset(
+                        locations[0].start_coordinates, click_offset_right
+                    )
+                )
                 self.mouse.click()
                 if locations[0].left_char_offset:
                     self.keyboard.right(locations[0].left_char_offset)
             else:
-                self.mouse.move(self._apply_click_offset(
-                    locations[0].end_coordinates, click_offset_right))
+                self.mouse.move(
+                    self._apply_click_offset(
+                        locations[0].end_coordinates, click_offset_right
+                    )
+                )
                 self.mouse.click()
                 offset = locations[0].right_char_offset + len(locations[0].text)
                 if offset:
@@ -146,23 +173,30 @@ class Controller(object):
         elif cursor_position == "middle":
             # Note: if it's helpful, we could change this to position the cursor
             # in the middle of the word.
-            coordinates = (int((locations[0].left + locations[-1].right) / 2),
-                           int((locations[0].top + locations[-1].bottom) / 2))
-            self.mouse.move(self._apply_click_offset(
-                coordinates, click_offset_right))
+            coordinates = (
+                int((locations[0].left + locations[-1].right) / 2),
+                int((locations[0].top + locations[-1].bottom) / 2),
+            )
+            self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
             self.mouse.click()
         if cursor_position == "after":
-            if (not use_nearest
-                or locations[-1].right_char_offset
-                <= locations[-1].left_char_offset + len(locations[-1].text)):
-                self.mouse.move(self._apply_click_offset(
-                    locations[-1].end_coordinates, click_offset_right))
+            if not use_nearest or locations[-1].right_char_offset <= locations[
+                -1
+            ].left_char_offset + len(locations[-1].text):
+                self.mouse.move(
+                    self._apply_click_offset(
+                        locations[-1].end_coordinates, click_offset_right
+                    )
+                )
                 self.mouse.click()
                 if locations[-1].right_char_offset:
                     self.keyboard.left(locations[-1].right_char_offset)
             else:
-                self.mouse.move(self._apply_click_offset(
-                    locations[-1].start_coordinates, click_offset_right))
+                self.mouse.move(
+                    self._apply_click_offset(
+                        locations[-1].start_coordinates, click_offset_right
+                    )
+                )
                 self.mouse.click()
                 offset = locations[-1].left_char_offset + len(locations[-1].text)
                 if offset:
@@ -176,10 +210,17 @@ class Controller(object):
 
     move_text_cursor_to_word = move_text_cursor_to_words
 
-    def select_text(self, start_words, end_words=None,
-                    for_deletion=False,
-                    start_timestamp=None, end_timestamp=None, click_offset_right=0,
-                    after_start=False, before_end=False):
+    def select_text(
+        self,
+        start_words,
+        end_words=None,
+        for_deletion=False,
+        start_timestamp=None,
+        end_timestamp=None,
+        click_offset_right=0,
+        after_start=False,
+        before_end=False,
+    ):
         """Select a range of onscreen text.
 
         If only start_words is provided, the full word or phrase is selected. If
@@ -199,11 +240,13 @@ class Controller(object):
         if start_timestamp:
             self.read_nearby(start_timestamp)
         # Always click before the word to avoid subword selection issues on Windows.
-        start_locations = self.move_text_cursor_to_words(start_words,
-                                                         "after" if after_start else "before",
-                                                         use_nearest=False,
-                                                         include_whitespace=for_deletion,
-                                                         click_offset_right=click_offset_right)
+        start_locations = self.move_text_cursor_to_words(
+            start_words,
+            "after" if after_start else "before",
+            use_nearest=False,
+            include_whitespace=for_deletion,
+            click_offset_right=click_offset_right,
+        )
         if not start_locations:
             return False
         if end_words:
@@ -213,8 +256,9 @@ class Controller(object):
                 # If gaze has significantly moved, look for the end word at the final gaze coordinates.
                 current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
                 previous_gaze_point = self.latest_screen_contents().screen_coordinates
-                if (_distance_squared(current_gaze_point, previous_gaze_point)
-                    > _squared(self.ocr_reader.radius / 2.0)):
+                if _distance_squared(
+                    current_gaze_point, previous_gaze_point
+                ) > _squared(self.ocr_reader.radius / 2.0):
                     self.read_nearby()
         else:
             end_words = start_words
@@ -222,42 +266,51 @@ class Controller(object):
         # Emacs requires a small sleep in between mouse clicks.
         time.sleep(0.01)
         try:
-            validate_function = lambda location: self._is_valid_selection(start_locations[0].start_coordinates,
-                                                                          location[-1].end_coordinates)
+            validate_function = lambda location: self._is_valid_selection(
+                start_locations[0].start_coordinates, location[-1].end_coordinates
+            )
             # Always click after the word to avoid subword selection issues on Windows.
             return self.move_text_cursor_to_word(
-                end_words, "before" if before_end else "after", use_nearest=False,
+                end_words,
+                "before" if before_end else "after",
+                use_nearest=False,
                 validate_location_function=validate_function,
                 include_whitespace=False,
-                click_offset_right=click_offset_right)
+                click_offset_right=click_offset_right,
+            )
         finally:
             self.keyboard.shift_up()
 
     def move_cursor_to_word_action(self, word, cursor_position="middle"):
         """Return a Dragonfly action for moving the mouse cursor nearby a word."""
         outer = self
+
         class MoveCursorToWordAction(dragonfly.ActionBase):
             def _execute(self, data=None):
                 dynamic_word = word
                 if data:
                     dynamic_word = word % data
                 return outer.move_cursor_to_word(dynamic_word, cursor_position)
+
         return MoveCursorToWordAction()
 
     def move_text_cursor_action(self, word, cursor_position="middle"):
         """Return a dragonfly action for moving the text cursor nearby a word."""
         outer = self
+
         class MoveTextCursorAction(dragonfly.ActionBase):
             def _execute(self, data=None):
                 dynamic_word = word
                 if data:
                     dynamic_word = word % data
                 return outer.move_text_cursor_to_word(dynamic_word, cursor_position)
+
         return MoveTextCursorAction()
 
     def select_text_action(self, start_word, end_word=None, for_deletion=False):
         """Return a Dragonfly action for selecting text."""
         outer = self
+
         class SelectTextAction(dragonfly.ActionBase):
             def _execute(self, data=None):
                 dynamic_start_word = start_word
@@ -269,7 +322,10 @@ class Controller(object):
                             dynamic_end_word = end_word % data
                         except KeyError:
                             dynamic_end_word = None
-                return outer.select_text(dynamic_start_word, dynamic_end_word, for_deletion=for_deletion)
+                return outer.select_text(
+                    dynamic_start_word, dynamic_end_word, for_deletion=for_deletion
+                )
+
         return SelectTextAction()
 
     @staticmethod
@@ -279,7 +335,9 @@ class Controller(object):
     def _write_data(self, screen_contents, word, word_locations):
         if not self.save_data_directory:
             return
-        file_name_prefix = "{}_{:.2f}".format("success" if word_locations else "failure", time.time())
+        file_name_prefix = "{}_{:.2f}".format(
+            "success" if word_locations else "failure", time.time()
+        )
         file_path_prefix = os.path.join(self.save_data_directory, file_name_prefix)
         screen_contents.screenshot.save(file_path_prefix + ".png")
         with open(file_path_prefix + ".txt", "w") as file:
@@ -305,5 +363,6 @@ def _squared(x):
 
 
 def _distance_squared(coordinate1, coordinate2):
-    return (_squared(coordinate1[0] - coordinate2[0])
-            + _squared(coordinate1[1] - coordinate2[1]))
+    return _squared(coordinate1[0] - coordinate2[0]) + _squared(
+        coordinate1[1] - coordinate2[1]
+    )

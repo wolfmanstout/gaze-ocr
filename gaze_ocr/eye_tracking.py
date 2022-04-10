@@ -14,7 +14,8 @@ class TalonEyeTracker(object):
         # !!! Using unstable private API that may break at any time !!!
         global actions, ui
         from talon import actions, tracking_system, ui
-        tracking_system.register('gaze', self._on_gaze)
+
+        tracking_system.register("gaze", self._on_gaze)
         self._gaze = None
         self.is_connected = True
         # Keep approximately 10 seconds of frames on Tobii 5
@@ -43,7 +44,11 @@ class TalonEyeTracker(object):
             frame_index -= 1
         frame = self._queue[frame_index]
         if abs(frame.ts - timestamp) > 0.1:
-            print("No gaze history available at that time: {}. Range: [{}, {}]".format(timestamp, self._ts_queue[0], self._ts_queue[-1]))
+            print(
+                "No gaze history available at that time: {}. Range: [{}, {}]".format(
+                    timestamp, self._ts_queue[0], self._ts_queue[-1]
+                )
+            )
             # Fall back to latest frame.
             frame = self._queue[-1]
         return self._gaze_to_pixels(frame.gaze)
@@ -73,11 +78,13 @@ class EyeTracker(object):
             cls._instance.connect()
         return cls._instance
 
-    def __init__(self,
-                 tobii_dll_directory,
-                 mouse=dragonfly_wrappers.Mouse(),
-                 keyboard=dragonfly_wrappers.Keyboard(),
-                 windows=dragonfly_wrappers.Windows()):
+    def __init__(
+        self,
+        tobii_dll_directory,
+        mouse=dragonfly_wrappers.Mouse(),
+        keyboard=dragonfly_wrappers.Keyboard(),
+        windows=dragonfly_wrappers.Windows(),
+    ):
         self._mouse = mouse
         self._keyboard = keyboard
         self._windows = windows
@@ -86,11 +93,13 @@ class EyeTracker(object):
         try:
             import clr
             from System import Action, Double
+
             sys.path.append(tobii_dll_directory)
             clr.AddReference("Tobii.Interaction.Model")
             clr.AddReference("Tobii.Interaction.Net")
             from Tobii.Interaction import Host
             from Tobii.Interaction.Framework import GazeTracking
+
             self.is_mock = False
         except:
             print("Eye tracking libraries are unavailable.")
@@ -137,8 +146,10 @@ class EyeTracker(object):
             return
         bounds = state.Value
         monitor_size = self._windows.get_monitor_size()
-        self._screen_scale = (monitor_size[0] / float(bounds.Width),
-                              monitor_size[1] / float(bounds.Height))
+        self._screen_scale = (
+            monitor_size[0] / float(bounds.Width),
+            monitor_size[1] / float(bounds.Height),
+        )
         self._monitor_size = monitor_size
 
     def _handle_gaze_state(self, sender, state):
@@ -152,22 +163,30 @@ class EyeTracker(object):
 
     def _handle_head_pose(self, sender, stream_data):
         pose = stream_data.Data
-        self._head_rotation = (pose.HeadRotation.X,
-                               pose.HeadRotation.Y,
-                               pose.HeadRotation.Z)
-        self._head_position = (pose.HeadPosition.X,
-                               pose.HeadPosition.Y,
-                               pose.HeadPosition.Z)
+        self._head_rotation = (
+            pose.HeadRotation.X,
+            pose.HeadRotation.Y,
+            pose.HeadRotation.Z,
+        )
+        self._head_position = (
+            pose.HeadPosition.X,
+            pose.HeadPosition.Y,
+            pose.HeadPosition.Z,
+        )
 
     def has_gaze_point(self):
-        return (not self.is_mock and
-                self._gaze_state == GazeTracking.GazeTracked and
-                self._gaze_point)
+        return (
+            not self.is_mock
+            and self._gaze_state == GazeTracking.GazeTracked
+            and self._gaze_point
+        )
 
     def get_gaze_point_or_default(self):
         if self.has_gaze_point():
-            return (self._gaze_point[0] * self._screen_scale[0],
-                    self._gaze_point[1] * self._screen_scale[1])
+            return (
+                self._gaze_point[0] * self._screen_scale[0],
+                self._gaze_point[1] * self._screen_scale[1],
+            )
         else:
             return self._windows.get_foreground_window_center()
 
