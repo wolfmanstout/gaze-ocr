@@ -113,7 +113,6 @@ class Controller(object):
         self,
         words,
         cursor_position="middle",
-        use_nearest=True,
         validate_location_function=None,
         include_whitespace=False,
         timestamp=None,
@@ -126,8 +125,6 @@ class Controller(object):
         Arguments:
         words: The word or phrase to search for.
         cursor_position: "before", "middle", or "after" (relative to the matching word).
-        use_nearest: Minimizes cursor movement for subword placement, instead of always
-                     clicking based on cursor_position.
         validate_location_function: Given a sequence of word locations, return whether to proceed with
                                     cursor movement.
         include_whitespace: Include whitespace to the left of the words.
@@ -148,7 +145,7 @@ class Controller(object):
             distance_from_right = locations[0].right_char_offset + len(
                 locations[0].text
             )
-            if not use_nearest or distance_from_left <= distance_from_right:
+            if distance_from_left <= distance_from_right:
                 self.mouse.move(
                     self._apply_click_offset(
                         locations[0].start_coordinates, click_offset_right
@@ -185,7 +182,7 @@ class Controller(object):
             distance_from_left = locations[-1].left_char_offset + len(
                 locations[-1].text
             )
-            if not use_nearest or distance_from_right <= distance_from_left:
+            if distance_from_right <= distance_from_left:
                 self.mouse.move(
                     self._apply_click_offset(
                         locations[-1].end_coordinates, click_offset_right
@@ -245,7 +242,6 @@ class Controller(object):
         start_locations = self.move_text_cursor_to_words(
             start_words,
             "after" if after_start else "before",
-            use_nearest=False,
             include_whitespace=for_deletion,
             click_offset_right=click_offset_right,
         )
@@ -275,7 +271,6 @@ class Controller(object):
             return self.move_text_cursor_to_word(
                 end_words,
                 "before" if before_end else "after",
-                use_nearest=False,
                 validate_location_function=validate_function,
                 include_whitespace=False,
                 click_offset_right=click_offset_right,
