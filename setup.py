@@ -15,9 +15,10 @@ setuptools.setup(
     packages=["gaze_ocr"],
     install_requires=[
         "screen-ocr",
-        "dragonfly2",
-        "pythonnet",
     ],
+    extras_require={
+        "dragonfly": ["dragonfly2", "pythonnet"],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache Software License",

@@ -1,70 +1,7 @@
 """Tobii eye tracker wrapper."""
 
-import bisect
 import math
 import sys
-
-from collections import deque
-
-from . import _dragonfly_wrappers as dragonfly_wrappers
-
-
-class TalonEyeTracker(object):
-    def __init__(self):
-        # !!! Using unstable private API that may break at any time !!!
-        global actions, ui
-        from talon import actions, tracking_system, ui
-
-        tracking_system.register("gaze", self._on_gaze)
-        self._gaze = None
-        self.is_connected = True
-        # Keep approximately 10 seconds of frames on Tobii 5
-        self._queue = deque(maxlen=1000)
-        self._ts_queue = deque(maxlen=1000)
-
-    def _on_gaze(self, frame):
-        self._gaze = frame.gaze
-        self._queue.append(frame)
-        self._ts_queue.append(frame.ts)
-
-    def has_gaze_point(self):
-        return self._gaze
-
-    def get_gaze_point_or_default(self):
-        if not self._gaze:
-            return (0, 0)
-        return self._gaze_to_pixels(self._gaze)
-
-    def get_gaze_point_at_timestamp(self, timestamp):
-        if not self._queue:
-            print("No gaze history available")
-            return (0, 0)
-        frame_index = bisect.bisect_left(self._ts_queue, timestamp)
-        if frame_index == len(self._queue):
-            frame_index -= 1
-        frame = self._queue[frame_index]
-        if abs(frame.ts - timestamp) > 0.1:
-            print(
-                "No gaze history available at that time: {}. Range: [{}, {}]".format(
-                    timestamp, self._ts_queue[0], self._ts_queue[-1]
-                )
-            )
-            # Fall back to latest frame.
-            frame = self._queue[-1]
-        return self._gaze_to_pixels(frame.gaze)
-
-    @staticmethod
-    def _gaze_to_pixels(gaze):
-        rect = ui.main_screen().rect
-        pos = rect.pos + gaze * rect.size
-        pos = rect.clamp(pos)
-        return (pos.x, pos.y)
-
-    def move_to_gaze_point(self, offset=(0, 0)):
-        gaze = self.get_gaze_point_or_default()
-        x = gaze[0] + offset[0]
-        y = gaze[1] + offset[1]
-        actions.mouse_move(x, y)
 
 
 class EyeTracker(object):
@@ -81,10 +18,15 @@ class EyeTracker(object):
     def __init__(
         self,
         tobii_dll_directory,
-        mouse=dragonfly_wrappers.Mouse(),
-        keyboard=dragonfly_wrappers.Keyboard(),
-        windows=dragonfly_wrappers.Windows(),
+        mouse=None,
+        keyboard=None,
+        windows=None,
     ):
+        if not mouse or not keyboard or not windows:
+            raise RuntimeError(
+                "Must provide keyboard, mouse, and windows implementation. "
+                "Import gaze_ocr.dragonfly or gaze_ocr.talon and use Mouse(), Keyboard(), and Windows()"
+            )
         self._mouse = mouse
         self._keyboard = keyboard
         self._windows = windows

@@ -17,7 +17,7 @@ Dragonfly. See handsfreecoding.org for more information.
    lib/net45/Tobii.Interaction.Net.dll.
 5. Ensure that the files are not blocked (right-click Properties, and if there
    is a "Security" section at the bottom, check the "Unblock" box.)
-6. `pip install gaze-ocr`
+6. `pip install gaze-ocr[dragonfly]`
 
 ## Usage
 
@@ -27,6 +27,8 @@ Sample Dragonfly grammar:
 
 ```python
 import gaze_ocr
+import gaze_ocr.dragonfly
+import gaze_ocr.eye_tracking
 import screen_ocr
 
 from dragonfly import (
@@ -43,29 +45,35 @@ from dragonfly import (
 DLL_DIRECTORY = "c:/Users/james/Downloads/tobii.interaction.0.7.3/"
 
 # Initialize eye tracking and OCR.
-tracker = gaze_ocr.eye_tracking.EyeTracker.get_connected_instance(DLL_DIRECTORY)
+tracker = gaze_ocr.eye_tracking.EyeTracker.get_connected_instance(DLL_DIRECTORY, 
+                                                                  mouse=gaze_ocr.dragonfly.Mouse(),
+                                                                  keyboard=gaze_ocr.dragonfly.Keyboard(),
+                                                                  windows=gaze_ocr.dragonfly.Windows())
 ocr_reader = screen_ocr.Reader.create_fast_reader()
-gaze_ocr_controller = gaze_ocr.Controller(ocr_reader, tracker)
+gaze_ocr_controller = gaze_ocr.Controller(ocr_reader,
+                                          tracker, 
+                                          mouse=gaze_ocr.dragonfly.Mouse(),
+                                          keyboard=gaze_ocr.dragonfly.Keyboard())
 
 
 class CommandRule(MappingRule):
     mapping = {
         # Click on text.
-        "<text> click": gaze_ocr_controller.move_cursor_to_word_action("%(text)s") + Mouse("left"),
+        "<text> click": gaze_ocr.dragonfly.MoveCursorToWordAction(gaze_ocr_controller, "%(text)s") + Mouse("left"),
 
         # Move the cursor for text editing.
-        "go before <text>": gaze_ocr_controller.move_cursor_to_word_action("%(text)s", "before") + Mouse("left"),
-        "go after <text>": gaze_ocr_controller.move_cursor_to_word_action("%(text)s", "after") + Mouse("left"),
+        "go before <text>": gaze_ocr.dragonfly.MoveCursorToWordAction(gaze_ocr_controller, "%(text)s", "before") + Mouse("left"),
+        "go after <text>": gaze_ocr.dragonfly.MoveCursorToWordAction(gaze_ocr_controller, "%(text)s", "after") + Mouse("left"),
 
         # Select text starting from the current position.
-        "words before <text>": gaze_ocr_controller.move_cursor_to_word_action("%(text)s", "before") + Key("shift:down") + Mouse("left") + Key("shift:up"),
-        "words after <text>": gaze_ocr_controller.move_cursor_to_word_action("%(text)s", "after") + Key("shift:down") + Mouse("left") + Key("shift:up"),
+        "words before <text>": gaze_ocr.dragonfly.MoveCursorToWordAction(gaze_ocr_controller, "%(text)s", "before") + Key("shift:down") + Mouse("left") + Key("shift:up"),
+        "words after <text>": gaze_ocr.dragonfly.MoveCursorToWordAction(gaze_ocr_controller, "%(text)s", "after") + Key("shift:down") + Mouse("left") + Key("shift:up"),
 
         # Select a phrase or range of text.
-        "words <text> [through <text2>]": gaze_ocr_controller.select_text_action("%(text)s", "%(text2)s"),
+        "words <text> [through <text2>]": gaze_ocr.dragonfly.SelectTextAction(gaze_ocr_controller, "%(text)s", "%(text2)s"),
 
         # Select and replace text.
-        "replace <text> with <replacement>": gaze_ocr_controller.select_text_action("%(text)s") + Text("%(replacement)s"),
+        "replace <text> with <replacement>": gaze_ocr.dragonfly.SelectTextAction(gaze_ocr_controller, "%(text)s") + Text("%(replacement)s"),
     }
 
     extras = [

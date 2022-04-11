@@ -4,10 +4,6 @@ import os.path
 import time
 from concurrent import futures
 
-import dragonfly
-
-from . import _dragonfly_wrappers as dragonfly_wrappers
-
 
 class Controller(object):
     """Mediates interaction with gaze tracking and OCR."""
@@ -17,9 +13,14 @@ class Controller(object):
         ocr_reader,
         eye_tracker,
         save_data_directory=None,
-        mouse=dragonfly_wrappers.Mouse(),
-        keyboard=dragonfly_wrappers.Keyboard(),
+        mouse=None,
+        keyboard=None,
     ):
+        if not mouse or not keyboard:
+            raise RuntimeError(
+                "Must provide keyboard and mouse implementation. "
+                "Import gaze_ocr.dragonfly or gaze_ocr.talon and use Mouse() and Keyboard()"
+            )
         self.ocr_reader = ocr_reader
         self.eye_tracker = eye_tracker
         self.save_data_directory = save_data_directory
@@ -278,52 +279,25 @@ class Controller(object):
         finally:
             self.keyboard.shift_up()
 
-    def move_cursor_to_word_action(self, word, cursor_position="middle"):
-        """Return a Dragonfly action for moving the mouse cursor nearby a word."""
-        outer = self
-
-        class MoveCursorToWordAction(dragonfly.ActionBase):
-            def _execute(self, data=None):
-                dynamic_word = word
-                if data:
-                    dynamic_word = word % data
-                return outer.move_cursor_to_word(dynamic_word, cursor_position)
-
-        return MoveCursorToWordAction()
+    def move_cursor_to_word_action(self):
+        raise RuntimeError(
+            "controller.move_cursor_to_word_action no longer supported. "
+            "Use gaze_ocr.dragonfly.MoveCursorToWordAction instead."
+        )
 
     def move_text_cursor_action(self, word, cursor_position="middle"):
         """Return a dragonfly action for moving the text cursor nearby a word."""
-        outer = self
-
-        class MoveTextCursorAction(dragonfly.ActionBase):
-            def _execute(self, data=None):
-                dynamic_word = word
-                if data:
-                    dynamic_word = word % data
-                return outer.move_text_cursor_to_word(dynamic_word, cursor_position)
-
-        return MoveTextCursorAction()
+        raise RuntimeError(
+            "controller.move_text_cursor_action no longer supported. "
+            "Use gaze_ocr.dragonfly.MoveTextCursorAction instead."
+        )
 
     def select_text_action(self, start_word, end_word=None, for_deletion=False):
         """Return a Dragonfly action for selecting text."""
-        outer = self
-
-        class SelectTextAction(dragonfly.ActionBase):
-            def _execute(self, data=None):
-                dynamic_start_word = start_word
-                dynamic_end_word = end_word
-                if data:
-                    dynamic_start_word = start_word % data
-                    if end_word:
-                        try:
-                            dynamic_end_word = end_word % data
-                        except KeyError:
-                            dynamic_end_word = None
-                return outer.select_text(
-                    dynamic_start_word, dynamic_end_word, for_deletion=for_deletion
-                )
-
-        return SelectTextAction()
+        raise RuntimeError(
+            "controller.select_text_action no longer supported. "
+            "Use gaze_ocr.dragonfly.SelectTextAction instead."
+        )
 
     @staticmethod
     def _apply_click_offset(coordinates, offset_right):
