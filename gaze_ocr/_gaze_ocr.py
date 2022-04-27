@@ -87,26 +87,73 @@ class Controller(object):
         timestamp: If specified, read nearby gaze at the provided timestamp.
         click_offset_right: Adjust the X-coordinate when clicking.
         """
+        result = None
+
+        def done_callback(r):
+            nonlocal result
+            result = r
+
+        # No disambiguation means this will complete synchronously.
+        self.move_cursor_to_words_with_callback(
+            words,
+            done_callback,
+            disambiguate_callback=None,
+            cursor_position=cursor_position,
+            timestamp=timestamp,
+            click_offset_right=click_offset_right,
+        )
+        return result
+
+    def move_cursor_to_words_with_callback(
+        self,
+        words,
+        done_callback,
+        disambiguate_callback,
+        cursor_position="middle",
+        timestamp=None,
+        click_offset_right=0,
+    ):
+        """Same as move_cursor_to_words, except that it runs a callback after execution instead of
+        returning the result, and optionally allows for disambiguation of nearby matches.
+
+        Arguments:
+        done_callback: Function which processes the result.
+        disambiguate_callback: Function called when disambiguation is needed. Accepts the list of
+            nearby matches and a function to call with the chosen match to resume execution.
+        """
         if timestamp:
             self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
-        locations = screen_contents.find_nearest_words(words)
-        self._write_data(screen_contents, words, locations)
-        if not locations:
-            return False
-        if cursor_position == "before":
-            coordinates = locations[0].start_coordinates
-        elif cursor_position == "middle":
-            coordinates = (
-                int((locations[0].left + locations[-1].right) / 2),
-                int((locations[0].top + locations[-1].bottom) / 2),
-            )
-        elif cursor_position == "after":
-            coordinates = locations[-1].end_coordinates
+        if disambiguate_callback:
+            matches = screen_contents.find_matching_words(words)
         else:
-            raise ValueError(cursor_position)
-        self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
-        return coordinates
+            match = screen_contents.find_nearest_words(words)
+            matches = [match] if match else []
+        self._write_data(screen_contents, words, matches)
+        if not matches:
+            done_callback(False)
+            return
+
+        def resume(locations):
+            if cursor_position == "before":
+                coordinates = locations[0].start_coordinates
+            elif cursor_position == "middle":
+                coordinates = (
+                    int((locations[0].left + locations[-1].right) / 2),
+                    int((locations[0].top + locations[-1].bottom) / 2),
+                )
+            elif cursor_position == "after":
+                coordinates = locations[-1].end_coordinates
+            else:
+                raise ValueError(cursor_position)
+            self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
+            done_callback(coordinates)
+
+        if len(matches) > 1:
+            assert disambiguate_callback
+            disambiguate_callback(matches, resume)
+        else:
+            resume(matches[0])
 
     move_cursor_to_word = move_cursor_to_words
 
@@ -132,15 +179,90 @@ class Controller(object):
         timestamp: Use gaze position at the provided timestamp.
         click_offset_right: Adjust the X-coordinate when clicking.
         """
+        result = None
+
+        def done_callback(r):
+            nonlocal result
+            result = r
+
+        # No disambiguation means this will complete synchronously.
+        self.move_text_cursor_to_words_with_callback(
+            words,
+            done_callback,
+            disambiguate_callback=None,
+            cursor_position=cursor_position,
+            validate_location_function=validate_location_function,
+            include_whitespace=include_whitespace,
+            timestamp=timestamp,
+            click_offset_right=click_offset_right,
+        )
+        return result
+
+    def move_text_cursor_to_words_with_callback(
+        self,
+        words,
+        done_callback,
+        disambiguate_callback,
+        cursor_position="middle",
+        validate_location_function=None,
+        include_whitespace=False,
+        timestamp=None,
+        click_offset_right=0,
+        hold_shift=False,
+    ):
+        """Same as move_text_cursor_to_words, except that it runs a callback after execution instead
+        of returning the result, and optionally allows for disambiguation of nearby matches.
+
+        Arguments:
+        done_callback: Function which processes the result.
+        disambiguate_callback: Function called when disambiguation is needed. Accepts the list of
+            nearby matches and a function to call with the chosen match to resume execution."""
         if timestamp:
             self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
-        locations = screen_contents.find_nearest_words(words)
-        self._write_data(screen_contents, words, locations)
-        if not locations or (
-            validate_location_function and not validate_location_function(locations)
-        ):
-            return False
+        if disambiguate_callback:
+            matches = screen_contents.find_matching_words(words)
+        else:
+            match = screen_contents.find_nearest_words(words)
+            matches = [match] if match else []
+        self._write_data(screen_contents, words, matches)
+        if not matches:
+            done_callback(False)
+            return
+
+        def resume(locations):
+            if validate_location_function and not validate_location_function(locations):
+                done_callback(False)
+                return
+            if hold_shift:
+                self.keyboard.shift_down()
+            try:
+                self._move_text_cursor_to_word_locations(
+                    locations,
+                    cursor_position=cursor_position,
+                    include_whitespace=include_whitespace,
+                    click_offset_right=click_offset_right,
+                )
+            finally:
+                if hold_shift:
+                    self.keyboard.shift_up()
+            done_callback(locations)
+
+        if len(matches) > 1:
+            assert disambiguate_callback
+            disambiguate_callback(matches, resume)
+        else:
+            resume(matches[0])
+
+    move_text_cursor_to_word = move_text_cursor_to_words
+
+    def _move_text_cursor_to_word_locations(
+        self,
+        locations,
+        cursor_position="middle",
+        include_whitespace=False,
+        click_offset_right=0,
+    ):
         if cursor_position == "before":
             distance_from_left = locations[0].left_char_offset
             distance_from_right = locations[0].right_char_offset + len(
@@ -206,9 +328,6 @@ class Controller(object):
                 # will gracefully fail if the word is the last in the
                 # editable text area.
                 self.keyboard.right(1)
-        return locations
-
-    move_text_cursor_to_word = move_text_cursor_to_words
 
     def select_text(
         self,
@@ -236,48 +355,107 @@ class Controller(object):
         after_start: If true, begin selection after the start word.
         before_end: If true, end selection before the end word.
         """
+        result = None
+
+        def done_callback(r):
+            nonlocal result
+            result = r
+
+        # No disambiguation means this will complete synchronously.
+        self.select_text_with_callback(
+            start_words,
+            done_callback=done_callback,
+            disambiguate_callback=None,
+            end_words=end_words,
+            for_deletion=for_deletion,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            click_offset_right=click_offset_right,
+            after_start=after_start,
+            before_end=before_end,
+        )
+        return result
+
+    def select_text_with_callback(
+        self,
+        start_words,
+        done_callback,
+        disambiguate_callback,
+        end_words=None,
+        for_deletion=False,
+        start_timestamp=None,
+        end_timestamp=None,
+        click_offset_right=0,
+        after_start=False,
+        before_end=False,
+    ):
+        """Same as select_text, except that it runs a callback after execution instead of returning
+        the result, and optionally allows for disambiguation of nearby matches.
+
+        Arguments:
+        done_callback: Function which processes the result.
+        disambiguate_callback: Function called when disambiguation is needed. Accepts the list of
+            nearby matches and a function to call with the chosen match to resume execution.
+        """
         # Automatically split up start word if multiple words are provided.
         if start_timestamp:
             self.read_nearby(start_timestamp)
+
+        def resume(start_locations):
+            if not start_locations:
+                done_callback(False)
+                return
+            # Emacs requires a small sleep in between mouse clicks.
+            time.sleep(0.01)
+            if end_words:
+                if end_timestamp:
+                    self.read_nearby(end_timestamp)
+                else:
+                    # If gaze has significantly moved, look for the end word at the final gaze coordinates.
+                    current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
+                    previous_gaze_point = (
+                        self.latest_screen_contents().screen_coordinates
+                    )
+                    if _distance_squared(
+                        current_gaze_point, previous_gaze_point
+                    ) > _squared(self.ocr_reader.radius / 2.0):
+                        self.read_nearby()
+                validate_function = lambda location: self._is_valid_selection(
+                    start_locations[0].start_coordinates, location[-1].end_coordinates
+                )
+                # Always click after the word to avoid subword selection issues on Windows.
+                self.move_text_cursor_to_words_with_callback(
+                    end_words,
+                    done_callback=done_callback,
+                    disambiguate_callback=disambiguate_callback,
+                    cursor_position="before" if before_end else "after",
+                    validate_location_function=validate_function,
+                    include_whitespace=False,
+                    click_offset_right=click_offset_right,
+                    hold_shift=True,
+                )
+            else:
+                self.keyboard.shift_down()
+                try:
+                    self._move_text_cursor_to_word_locations(
+                        start_locations,
+                        cursor_position="before" if before_end else "after",
+                        include_whitespace=False,
+                        click_offset_right=click_offset_right,
+                    )
+                finally:
+                    self.keyboard.shift_up()
+                done_callback(start_locations)
+
         # Always click before the word to avoid subword selection issues on Windows.
-        start_locations = self.move_text_cursor_to_words(
+        self.move_text_cursor_to_words_with_callback(
             start_words,
-            "after" if after_start else "before",
+            done_callback=resume,
+            disambiguate_callback=disambiguate_callback,
+            cursor_position="after" if after_start else "before",
             include_whitespace=for_deletion,
             click_offset_right=click_offset_right,
         )
-        if not start_locations:
-            return False
-        if end_words:
-            if end_timestamp:
-                self.read_nearby(end_timestamp)
-            else:
-                # If gaze has significantly moved, look for the end word at the final gaze coordinates.
-                current_gaze_point = self.eye_tracker.get_gaze_point_or_default()
-                previous_gaze_point = self.latest_screen_contents().screen_coordinates
-                if _distance_squared(
-                    current_gaze_point, previous_gaze_point
-                ) > _squared(self.ocr_reader.radius / 2.0):
-                    self.read_nearby()
-        else:
-            end_words = start_words
-        self.keyboard.shift_down()
-        # Emacs requires a small sleep in between mouse clicks.
-        time.sleep(0.01)
-        try:
-            validate_function = lambda location: self._is_valid_selection(
-                start_locations[0].start_coordinates, location[-1].end_coordinates
-            )
-            # Always click after the word to avoid subword selection issues on Windows.
-            return self.move_text_cursor_to_word(
-                end_words,
-                "before" if before_end else "after",
-                validate_location_function=validate_function,
-                include_whitespace=False,
-                click_offset_right=click_offset_right,
-            )
-        finally:
-            self.keyboard.shift_up()
 
     def move_cursor_to_word_action(self):
         raise RuntimeError(
