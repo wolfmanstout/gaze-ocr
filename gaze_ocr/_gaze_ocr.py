@@ -1,4 +1,10 @@
-"""Library for manipulating on-screen text using gaze tracking and OCR."""
+"""Library for manipulating on-screen text using gaze tracking and OCR.
+
+Supports disambiguation using Python generators to stop and resume computation. The *_generator
+functions return a generator which can be started with next(generator), which will return a list of
+matches if disambiguation is needed. Resume computation with generator.send(match). When computation
+completes, next() or send() will raise StopIteration with the .value set to the return value.
+"""
 
 import os.path
 import time
@@ -105,7 +111,9 @@ class Controller(object):
         timestamp=None,
         click_offset_right=0,
     ):
-        """TODO"""
+        """Same as move_cursor_to_words, except it supports disambiguation through a generator.
+        See header comment for details.
+        """
         if timestamp:
             self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
@@ -183,7 +191,9 @@ class Controller(object):
         click_offset_right=0,
         hold_shift=False,
     ):
-        """TODO"""
+        """Same as move_text_cursor_to_words, except it supports disambiguation through a generator.
+        See header comment for details.
+        """
         if timestamp:
             self.read_nearby(timestamp)
         screen_contents = self.latest_screen_contents()
@@ -342,7 +352,9 @@ class Controller(object):
         after_start=False,
         before_end=False,
     ):
-        """TODO"""
+        """Same as select_text, except it supports disambiguation through a generator.
+        See header comment for details.
+        """
         # Automatically split up start word if multiple words are provided.
         if start_timestamp:
             self.read_nearby(start_timestamp)
