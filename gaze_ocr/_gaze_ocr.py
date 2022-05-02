@@ -10,6 +10,9 @@ import os.path
 import time
 from concurrent import futures
 
+# TODO Eliminate all below for out-of-box Talon compatibility
+from PIL import ImageChops, ImageGrab
+
 
 class Controller(object):
     """Mediates interaction with gaze tracking and OCR."""
@@ -32,6 +35,7 @@ class Controller(object):
         self.save_data_directory = save_data_directory
         self.mouse = mouse
         self.keyboard = keyboard
+        self._change_radius = 10
         self._executor = futures.ThreadPoolExecutor(max_workers=1)
         self._future = None
 
@@ -141,10 +145,42 @@ class Controller(object):
             coordinates = locations[-1].end_coordinates
         else:
             raise ValueError(cursor_position)
+        if self._screenshot_changed_near_coordinates(
+            screen_contents.screenshot,
+            screen_contents.screen_offset,
+            coordinates,
+        ):
+            return False
         self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
         return coordinates
 
     move_cursor_to_word = move_cursor_to_words
+
+    def _screenshot_changed_near_coordinates(
+        self, old_screenshot, old_screen_offset, coordinates
+    ):
+        old_bounding_box = (
+            max(0, coordinates[0] - old_screen_offset[0] - self._change_radius),
+            max(0, coordinates[1] - old_screen_offset[1] - self._change_radius),
+            min(
+                old_screenshot.width,
+                coordinates[0] - old_screen_offset[0] + self._change_radius,
+            ),
+            min(
+                old_screenshot.height,
+                coordinates[1] - old_screen_offset[1] + self._change_radius,
+            ),
+        )
+        old_patch = old_screenshot.crop(old_bounding_box)
+        new_screenshot = ImageGrab.grab()
+        new_bounding_box = (
+            max(0, coordinates[0] - self._change_radius),
+            max(0, coordinates[1] - self._change_radius),
+            min(new_screenshot.width, coordinates[0] + self._change_radius),
+            min(new_screenshot.height, coordinates[1] + self._change_radius),
+        )
+        new_patch = new_screenshot.crop(new_bounding_box)
+        return ImageChops.difference(new_patch, old_patch).getbbox() is not None
 
     def move_text_cursor_to_words(
         self,
@@ -214,12 +250,13 @@ class Controller(object):
         if hold_shift:
             self.keyboard.shift_down()
         try:
-            self._move_text_cursor_to_word_locations(
+            if not self._move_text_cursor_to_word_locations(
                 locations,
                 cursor_position=cursor_position,
                 include_whitespace=include_whitespace,
                 click_offset_right=click_offset_right,
-            )
+            ):
+                return False
         finally:
             if hold_shift:
                 self.keyboard.shift_up()
@@ -240,20 +277,30 @@ class Controller(object):
                 locations[0].text
             )
             if distance_from_left <= distance_from_right:
-                self.mouse.move(
-                    self._apply_click_offset(
-                        locations[0].start_coordinates, click_offset_right
-                    )
+                coordinates = self._apply_click_offset(
+                    locations[0].start_coordinates, click_offset_right
                 )
+                if self._screenshot_changed_near_coordinates(
+                    self.latest_screen_contents().screenshot,
+                    self.latest_screen_contents().screen_offset,
+                    coordinates,
+                ):
+                    return False
+                self.mouse.move(coordinates)
                 self.mouse.click()
                 if distance_from_left:
                     self.keyboard.right(distance_from_left)
             else:
-                self.mouse.move(
-                    self._apply_click_offset(
-                        locations[0].end_coordinates, click_offset_right
-                    )
+                coordinates = self._apply_click_offset(
+                    locations[0].end_coordinates, click_offset_right
                 )
+                if self._screenshot_changed_near_coordinates(
+                    self.latest_screen_contents().screenshot,
+                    self.latest_screen_contents().screen_offset,
+                    coordinates,
+                ):
+                    return False
+                self.mouse.move(coordinates)
                 self.mouse.click()
                 if distance_from_right:
                     self.keyboard.left(distance_from_right)
@@ -265,11 +312,20 @@ class Controller(object):
         elif cursor_position == "middle":
             # Note: if it's helpful, we could change this to position the cursor
             # in the middle of the word.
-            coordinates = (
-                int((locations[0].left + locations[-1].right) / 2),
-                int((locations[0].top + locations[-1].bottom) / 2),
+            coordinates = self._apply_click_offset(
+                (
+                    int((locations[0].left + locations[-1].right) / 2),
+                    int((locations[0].top + locations[-1].bottom) / 2),
+                ),
+                click_offset_right,
             )
-            self.mouse.move(self._apply_click_offset(coordinates, click_offset_right))
+            if self._screenshot_changed_near_coordinates(
+                self.latest_screen_contents().screenshot,
+                self.latest_screen_contents().screen_offset,
+                coordinates,
+            ):
+                return False
+            self.mouse.move(coordinates)
             self.mouse.click()
         if cursor_position == "after":
             distance_from_right = locations[-1].right_char_offset
@@ -277,20 +333,30 @@ class Controller(object):
                 locations[-1].text
             )
             if distance_from_right <= distance_from_left:
-                self.mouse.move(
-                    self._apply_click_offset(
-                        locations[-1].end_coordinates, click_offset_right
-                    )
+                coordinates = self._apply_click_offset(
+                    locations[-1].end_coordinates, click_offset_right
                 )
+                if self._screenshot_changed_near_coordinates(
+                    self.latest_screen_contents().screenshot,
+                    self.latest_screen_contents().screen_offset,
+                    coordinates,
+                ):
+                    return False
+                self.mouse.move(coordinates)
                 self.mouse.click()
                 if distance_from_right:
                     self.keyboard.left(distance_from_right)
             else:
-                self.mouse.move(
-                    self._apply_click_offset(
-                        locations[-1].start_coordinates, click_offset_right
-                    )
+                coordinates = self._apply_click_offset(
+                    locations[-1].start_coordinates, click_offset_right
                 )
+                if self._screenshot_changed_near_coordinates(
+                    self.latest_screen_contents().screenshot,
+                    self.latest_screen_contents().screen_offset,
+                    coordinates,
+                ):
+                    return False
+                self.mouse.move(coordinates)
                 self.mouse.click()
                 if distance_from_left:
                     self.keyboard.right(distance_from_left)
@@ -299,6 +365,7 @@ class Controller(object):
                 # will gracefully fail if the word is the last in the
                 # editable text area.
                 self.keyboard.right(1)
+        return True
 
     def select_text(
         self,
@@ -399,12 +466,13 @@ class Controller(object):
         else:
             self.keyboard.shift_down()
             try:
-                self._move_text_cursor_to_word_locations(
+                if not self._move_text_cursor_to_word_locations(
                     start_locations,
                     cursor_position="before" if before_end else "after",
                     include_whitespace=False,
                     click_offset_right=click_offset_right,
-                )
+                ):
+                    return False
             finally:
                 self.keyboard.shift_up()
             return start_locations

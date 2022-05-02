@@ -14,6 +14,7 @@ setuptools.setup(
     url="https://github.com/wolfmanstout/gaze-ocr",
     packages=["gaze_ocr"],
     install_requires=[
+        "pillow",
         "screen-ocr",
     ],
     extras_require={
