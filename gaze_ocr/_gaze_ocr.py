@@ -513,9 +513,11 @@ class Controller(object):
     def _write_data(self, screen_contents, word, word_locations):
         if not self.save_data_directory:
             return
-        file_name_prefix = "{}_{:.2f}".format(
-            "success" if word_locations else "failure", time.time()
-        )
+        if word_locations:
+            result = "multiple" if len(word_locations) > 1 else "success"
+        else:
+            result = "failure"
+        file_name_prefix = f"{result}_{time.time():.2f}"
         file_path_prefix = os.path.join(self.save_data_directory, file_name_prefix)
         screen_contents.screenshot.save(file_path_prefix + ".png")
         with open(file_path_prefix + ".txt", "w") as file:
