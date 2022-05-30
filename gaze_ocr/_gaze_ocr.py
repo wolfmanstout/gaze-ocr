@@ -71,7 +71,27 @@ class Controller(object):
             else self.eye_tracker.get_gaze_point_or_default()
         )
         self._future = futures.Future()
-        self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+        if timestamp:
+            # TODO Extract constants into optional constructor params.
+            bounds = self.eye_tracker.get_gaze_bounds_during_time_range(
+                timestamp - 0.2, timestamp + 0.2
+            )
+            if not bounds:
+                self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+                return
+            max_radius = (
+                max(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2.0
+            )
+
+            self._future.set_result(
+                self.ocr_reader.read_nearby(
+                    gaze_point,
+                    search_radius=max_radius + 100,
+                    crop_radius=max_radius + 200,
+                )
+            )
+        else:
+            self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
 
     def latest_screen_contents(self):
         """Return the ScreenContents of the latest call to start_reading_nearby().

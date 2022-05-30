@@ -1,6 +1,8 @@
 import bisect
 from collections import deque
+from dataclasses import dataclass
 from talon import actions, tracking_system, ui
+from talon.types import Point2d
 
 
 class Mouse(object):
@@ -44,6 +46,14 @@ class Keyboard(object):
             actions.key("right")
 
 
+@dataclass
+class BoundingBox(object):
+    left: int
+    right: int
+    top: int
+    bottom: int
+
+
 class TalonEyeTracker(object):
     def __init__(self):
         # !!! Using unstable private API that may break at any time !!!
@@ -84,6 +94,36 @@ class TalonEyeTracker(object):
             # Fall back to latest frame.
             frame = self._queue[-1]
         return self._gaze_to_pixels(frame.gaze)
+
+    def get_gaze_bounds_during_time_range(self, start_timestamp, end_timestamp):
+        if not self._queue:
+            print("No gaze history available")
+            return None
+        start_index = bisect.bisect_left(self._ts_queue, start_timestamp)
+        if start_index == len(self._queue):
+            start_index -= 1
+        end_index = bisect.bisect_left(self._ts_queue, end_timestamp)
+        if end_index == len(self._queue):
+            end_index -= 1
+        left = right = top = bottom = None
+        for i in range(start_index, end_index + 1):
+            frame = self._queue[i]
+            if frame.ts < start_timestamp - 0.1 or frame.ts > end_timestamp + 0.1:
+                continue
+            left = min(frame.gaze.x, left) if left else frame.gaze.x
+            top = min(frame.gaze.y, top) if top else frame.gaze.y
+            right = max(frame.gaze.x, right) if right else frame.gaze.x
+            bottom = max(frame.gaze.y, bottom) if bottom else frame.gaze.y
+        if not left:
+            return None
+        top_left = self._gaze_to_pixels(Point2d(x=left, y=top))
+        bottom_right = self._gaze_to_pixels(Point2d(x=right, y=bottom))
+        return BoundingBox(
+            left=top_left[0],
+            top=top_left[1],
+            right=bottom_right[0],
+            bottom=bottom_right[1],
+        )
 
     @staticmethod
     def _gaze_to_pixels(gaze):
