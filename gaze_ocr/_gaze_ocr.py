@@ -10,9 +10,6 @@ import os.path
 import time
 from concurrent import futures
 
-# TODO Eliminate all below for out-of-box Talon compatibility
-from PIL import ImageChops, ImageGrab
-
 
 class Controller(object):
     """Mediates interaction with gaze tracking and OCR."""
@@ -179,28 +176,32 @@ class Controller(object):
     def _screenshot_changed_near_coordinates(
         self, old_screenshot, old_screen_offset, coordinates
     ):
-        old_bounding_box = (
-            max(0, coordinates[0] - old_screen_offset[0] - self._change_radius),
-            max(0, coordinates[1] - old_screen_offset[1] - self._change_radius),
-            min(
-                old_screenshot.width,
-                coordinates[0] - old_screen_offset[0] + self._change_radius,
-            ),
-            min(
-                old_screenshot.height,
-                coordinates[1] - old_screen_offset[1] + self._change_radius,
-            ),
-        )
-        old_patch = old_screenshot.crop(old_bounding_box)
-        new_screenshot = ImageGrab.grab()
-        new_bounding_box = (
-            max(0, coordinates[0] - self._change_radius),
-            max(0, coordinates[1] - self._change_radius),
-            min(new_screenshot.width, coordinates[0] + self._change_radius),
-            min(new_screenshot.height, coordinates[1] + self._change_radius),
-        )
-        new_patch = new_screenshot.crop(new_bounding_box)
-        return ImageChops.difference(new_patch, old_patch).getbbox() is not None
+        return False
+        # Disable this functionality for now due to interaction with the cursor
+        # during selection. Also, most screen changes happen after moving the
+        # cursor.
+        # old_bounding_box = (
+        #     max(0, coordinates[0] - old_screen_offset[0] - self._change_radius),
+        #     max(0, coordinates[1] - old_screen_offset[1] - self._change_radius),
+        #     min(
+        #         old_screenshot.width,
+        #         coordinates[0] - old_screen_offset[0] + self._change_radius,
+        #     ),
+        #     min(
+        #         old_screenshot.height,
+        #         coordinates[1] - old_screen_offset[1] + self._change_radius,
+        #     ),
+        # )
+        # old_patch = old_screenshot.crop(old_bounding_box)
+        # new_screenshot = ImageGrab.grab()
+        # new_bounding_box = (
+        #     max(0, coordinates[0] - self._change_radius),
+        #     max(0, coordinates[1] - self._change_radius),
+        #     min(new_screenshot.width, coordinates[0] + self._change_radius),
+        #     min(new_screenshot.height, coordinates[1] + self._change_radius),
+        # )
+        # new_patch = new_screenshot.crop(new_bounding_box)
+        # return ImageChops.difference(new_patch, old_patch).getbbox() is not None
 
     def move_text_cursor_to_words(
         self,
@@ -438,6 +439,7 @@ class Controller(object):
         click_offset_right=0,
         after_start=False,
         before_end=False,
+        select_pause_seconds=0.01,
     ):
         """Same as select_text, except it supports disambiguation through a generator.
         See header comment for details.
@@ -456,7 +458,7 @@ class Controller(object):
         if not start_locations:
             return False
         # Emacs requires a small sleep in between mouse clicks.
-        time.sleep(0.01)
+        time.sleep(select_pause_seconds)
         if end_words:
             if end_timestamp:
                 self.read_nearby(end_timestamp)
