@@ -28,22 +28,34 @@ class Mouse(object):
 
 
 class Keyboard(object):
+    def __init__(self):
+        # shift:down won't affect future keystrokes on Mac, so we track it ourselves.
+        self._shift = False
+
     def type(self, text):
         actions.insert(text)
 
     def shift_down(self):
         actions.key("shift:down")
+        self._shift = True
 
     def shift_up(self):
         actions.key("shift:up")
+        self._shift = False
 
     def left(self, n=1):
         for _ in range(n):
-            actions.key("left")
+            if self._shift:
+                actions.key("shift-left")
+            else:
+                actions.key("left")
 
     def right(self, n=1):
         for _ in range(n):
-            actions.key("right")
+            if self._shift:
+                actions.key("shift-right")
+            else:
+                actions.key("right")
 
 
 @dataclass
