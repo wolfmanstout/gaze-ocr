@@ -17,6 +17,6 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install the project
-        run: uv sync --dev
+        run: uv sync --dev --no-sources
       - name: Run tests
         run: uv run pytest
