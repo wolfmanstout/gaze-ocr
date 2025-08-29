@@ -19,4 +19,4 @@ jobs:
       - name: Install the project
         run: uv sync --dev --no-sources
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest --no-sources
