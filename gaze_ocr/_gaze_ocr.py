@@ -605,20 +605,23 @@ class Controller:
         matches = list(prefix_matches) + list(suffix_matches)
         self._write_data(screen_contents, words, matches)
         # Find any pairs of matches that are adjacent onscreen. Track whether there is
-        # whitespace between the pairs.
+        # whitespace between the pairs. Only do this if the prefix and suffix cover
+        # disjoint parts of the words; if they overlap, there is no middle text to
+        # insert between adjacent matches.
         adjacent_prefix_matches = []
         whitespace_between_matches_list = []
-        for prefix_match in prefix_matches:
-            for suffix_match in suffix_matches:
-                if prefix_match[-1].is_adjacent_left_of(
-                    suffix_match[0], allow_whitespace=True
-                ):
-                    adjacent_prefix_matches.append(prefix_match)
-                    whitespace_between_matches_list.append(
-                        not prefix_match[-1].is_adjacent_left_of(
-                            suffix_match[0], allow_whitespace=False
+        if prefix_length + suffix_length < len(words):
+            for prefix_match in prefix_matches:
+                for suffix_match in suffix_matches:
+                    if prefix_match[-1].is_adjacent_left_of(
+                        suffix_match[0], allow_whitespace=True
+                    ):
+                        adjacent_prefix_matches.append(prefix_match)
+                        whitespace_between_matches_list.append(
+                            not prefix_match[-1].is_adjacent_left_of(
+                                suffix_match[0], allow_whitespace=False
+                            )
                         )
-                    )
 
         if adjacent_prefix_matches:
             locations = self._plan_cursor_locations(
