@@ -65,7 +65,6 @@ def _make_controller(onscreen_words: list[str]) -> Controller:
         mouse=FakeMouse(),
         keyboard=FakeKeyboard(),
     )
-    controller.start_reading_nearby()
     return controller
 
 

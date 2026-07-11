@@ -9,7 +9,6 @@ completes, next() or send() will raise StopIteration with the .value set to the 
 import os.path
 import time
 from collections.abc import Callable, Generator, Sequence
-from concurrent import futures
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Optional, TypeVar, cast
@@ -164,15 +163,14 @@ class Controller:
         self.app_actions = app_actions
         self.save_data_directory = save_data_directory
         self.gaze_box_padding = gaze_box_padding
-        self._executor = futures.ThreadPoolExecutor(max_workers=1)
-        self._future = None
+        self._latest_screen_contents: Optional[ScreenContents] = None
         self._ocr_cache = OcrCache(
             ocr_reader, fallback_when_no_eye_tracker=fallback_when_no_eye_tracker
         )
         self.fallback_when_no_eye_tracker = fallback_when_no_eye_tracker
 
     def shutdown(self, wait=True):
-        self._executor.shutdown(wait)
+        """Retained for compatibility; OCR execution is synchronous."""
 
     def __enter__(self):
         return self
@@ -194,31 +192,17 @@ class Controller:
         return lambda: cast(T, value)
 
     def start_reading_nearby(self) -> None:
-        """Start OCR nearby the gaze point in a background thread."""
-        gaze_point = (
-            self.eye_tracker.get_gaze_point()
-            if self.eye_tracker and self.eye_tracker.is_connected
-            else None
-        )
-        # Don't enqueue multiple requests.
-        if self._future and not self._future.done():
-            self._future.cancel()
-        self._future = self._executor.submit(
-            (lambda: self.ocr_reader.read_nearby(gaze_point))
-            if gaze_point
-            else (lambda: self.ocr_reader.read_screen())
-        )
+        """Retained as a no-op for compatibility with older integrations."""
 
     def read_nearby(
         self,
         time_range: Optional[tuple[float, float]] = None,
-    ) -> None:
+    ) -> ScreenContents:
         """Perform OCR nearby the gaze point in the current thread.
 
         Arguments:
         time_range: If specified, read within the bounds of gaze during that time.
         """
-        self._future = futures.Future()
         if time_range and time_range[0] and time_range[1]:
             start_timestamp, end_timestamp = time_range
             # Pad the range to account for timestamp inaccuracy.
@@ -230,19 +214,20 @@ class Controller:
                 else None
             )
             if not gaze_bounds:
-                self._future.set_result(
-                    self._ocr_cache.read((start_timestamp, end_timestamp), None)
+                self._latest_screen_contents = self._ocr_cache.read(
+                    (start_timestamp, end_timestamp), None
                 )
-                return
+                return self._latest_screen_contents
             ocr_bounds = (
                 gaze_bounds.left - self.gaze_box_padding,
                 gaze_bounds.top - self.gaze_box_padding,
                 gaze_bounds.right + self.gaze_box_padding,
                 gaze_bounds.bottom + self.gaze_box_padding,
             )
-            self._future.set_result(
-                self._ocr_cache.read((start_timestamp, end_timestamp), ocr_bounds)
+            self._latest_screen_contents = self._ocr_cache.read(
+                (start_timestamp, end_timestamp), ocr_bounds
             )
+            return self._latest_screen_contents
         else:
             gaze_point = (
                 self.eye_tracker.get_gaze_point()
@@ -250,26 +235,22 @@ class Controller:
                 else None
             )
             if gaze_point:
-                self._future.set_result(self.ocr_reader.read_nearby(gaze_point))
+                self._latest_screen_contents = self.ocr_reader.read_nearby(gaze_point)
             else:
                 if (
                     self.fallback_when_no_eye_tracker
                     == EyeTrackerFallback.ACTIVE_WINDOW
                 ):
-                    self._future.set_result(self.ocr_reader.read_current_window())
+                    self._latest_screen_contents = self.ocr_reader.read_current_window()
                 else:
-                    self._future.set_result(self.ocr_reader.read_screen())
+                    self._latest_screen_contents = self.ocr_reader.read_screen()
+            return self._latest_screen_contents
 
     def latest_screen_contents(self) -> ScreenContents:
-        """Return the ScreenContents of the latest call to start_reading_nearby().
-
-        Blocks until available.
-        """
-        if not self._future:
-            raise RuntimeError(
-                "Call start_reading_nearby() before latest_screen_contents()"
-            )
-        return self._future.result()
+        """Return the most recent OCR result for visualization and diagnostics."""
+        if self._latest_screen_contents is None:
+            raise RuntimeError("Call read_nearby() before latest_screen_contents()")
+        return self._latest_screen_contents
 
     def move_cursor_to_words(
         self,
@@ -309,9 +290,7 @@ class Controller:
         """Same as move_cursor_to_words, except it supports disambiguation through a generator.
         See header comment for details.
         """
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         matches = screen_contents.find_matching_words(words)
         self._write_data(screen_contents, words, matches)
         cursor_locations = []
@@ -345,6 +324,7 @@ class Controller:
         location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=cursor_locations,
+            screen_contents=screen_contents,
         )
         if not location:
             return None
@@ -402,9 +382,7 @@ class Controller:
         """Same as move_text_cursor_to_words, except it supports disambiguation through a generator.
         See header comment for details.
         """
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         matches = screen_contents.find_matching_words(words)
         if filter_location_function:
             matches = list(filter(filter_location_function, matches))
@@ -429,6 +407,7 @@ class Controller:
         location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=locations,
+            screen_contents=screen_contents,
         )
         if not location:
             return None
@@ -480,9 +459,7 @@ class Controller:
     ]:
         """Same as move_text_cursor_to_longest_prefix, except it supports
         disambiguation through a generator. See header comment for details."""
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         matches, prefix_length = screen_contents.find_longest_matching_prefix(
             words, filter_location_function=filter_location_function
         )
@@ -501,6 +478,7 @@ class Controller:
         location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=locations,
+            screen_contents=screen_contents,
         )
         if not location:
             return None, 0
@@ -550,9 +528,7 @@ class Controller:
     ]:
         """Same as move_text_cursor_to_longest_suffix, except it supports
         disambiguation through a generator. See header comment for details."""
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         matches, suffix_length = screen_contents.find_longest_matching_suffix(
             words, filter_location_function=filter_location_function
         )
@@ -571,6 +547,7 @@ class Controller:
         location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=locations,
+            screen_contents=screen_contents,
         )
         if not location:
             return None, 0
@@ -593,9 +570,7 @@ class Controller:
         """Finds onscreen text that matches the start and/or end of the provided words,
         and moves the text cursor to the start of where the words differ. Returns the
         start and end indices of the differing text in the provided words, if found."""
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         prefix_matches, prefix_length = screen_contents.find_longest_matching_prefix(
             words
         )
@@ -635,6 +610,7 @@ class Controller:
             location = yield from self._choose_cursor_location(
                 disambiguate=disambiguate,
                 matches=locations,
+                screen_contents=screen_contents,
             )
             if not location:
                 return None
@@ -668,6 +644,7 @@ class Controller:
             location = yield from self._choose_cursor_location(
                 disambiguate=disambiguate,
                 matches=locations,
+                screen_contents=screen_contents,
             )
             if not location:
                 return None
@@ -735,9 +712,7 @@ class Controller:
         """Same as select_text, except it supports disambiguation through a generator.
         See header comment for details.
         """
-        if start_time_range:
-            self.read_nearby(start_time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(start_time_range)
         start_matches = screen_contents.find_matching_words(start_words)
         self._write_data(screen_contents, start_words, start_matches)
         start_locations = self._plan_cursor_locations(
@@ -750,16 +725,13 @@ class Controller:
         start_location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=start_locations,
+            screen_contents=screen_contents,
         )
         if not start_location:
             return None
         start_location.move_text_cursor()
         time.sleep(self._resolve_value(select_pause_seconds))
         if end_words:
-            if end_time_range:
-                self.read_nearby(end_time_range)
-            else:
-                self._read_nearby_if_gaze_moved()
 
             def filter_function(location):
                 return self._is_valid_selection(
@@ -773,6 +745,7 @@ class Controller:
                     cursor_position="before" if before_end else "after",
                     filter_location_function=filter_function,
                     include_whitespace=False,
+                    time_range=end_time_range,
                     click_offset_right=click_offset_right,
                     hold_shift=True,
                     selection_position=self.SelectionPosition.RIGHT,
@@ -823,9 +796,7 @@ class Controller:
     ) -> Generator[Sequence[CursorLocation], CursorLocation, Optional[tuple[int, int]]]:
         """Same as select_matching_text, except it supports disambiguation through a
         generator. See header comment for details."""
-        if time_range:
-            self.read_nearby(time_range)
-        screen_contents = self.latest_screen_contents()
+        screen_contents = self.read_nearby(time_range)
         prefix_matches, prefix_length = screen_contents.find_longest_matching_prefix(
             words
         )
@@ -839,13 +810,13 @@ class Controller:
         before_prefix_location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=before_prefix_locations,
+            screen_contents=screen_contents,
         )
         if before_prefix_location:
             before_prefix_location.move_text_cursor()
             time.sleep(self._resolve_value(select_pause_seconds))
         if not time_range:
-            self._read_nearby_if_gaze_moved()
-            screen_contents = self.latest_screen_contents()
+            screen_contents = self._read_nearby_if_gaze_moved(screen_contents)
         if before_prefix_location:
 
             def filter_function(location):
@@ -868,6 +839,7 @@ class Controller:
         after_suffix_location = yield from self._choose_cursor_location(
             disambiguate=disambiguate,
             matches=after_suffix_locations,
+            screen_contents=screen_contents,
         )
         if before_prefix_location and after_suffix_location:
             self.keyboard.shift_down()
@@ -918,18 +890,19 @@ class Controller:
             return (len(words) - suffix_length, len(words))
 
     def find_nearest_cursor_location(
-        self, locations: Sequence[CursorLocation]
+        self,
+        locations: Sequence[CursorLocation],
+        screen_contents: ScreenContents,
     ) -> Optional[CursorLocation]:
         """Returns the cursor location nearest to the current gaze point, if
         available."""
         if not locations:
             return None
-        contents = self.latest_screen_contents()
-        reference_point = contents.screen_coordinates
+        reference_point = screen_contents.screen_coordinates
         if not reference_point:
-            if contents.bounding_box:
+            if screen_contents.bounding_box:
                 # Use center of bounding box as reference point
-                left, top, right, bottom = contents.bounding_box
+                left, top, right, bottom = screen_contents.bounding_box
                 reference_point = ((left + right) // 2, (top + bottom) // 2)
             else:
                 # "Nearest" is undefined.
@@ -963,17 +936,18 @@ class Controller:
             "Use gaze_ocr.dragonfly.SelectTextAction instead."
         )
 
-    def _read_nearby_if_gaze_moved(self):
+    def _read_nearby_if_gaze_moved(
+        self, screen_contents: ScreenContents
+    ) -> ScreenContents:
         current_gaze = (
             self.eye_tracker.get_gaze_point()
             if self.eye_tracker and self.eye_tracker.is_connected
             else None
         )
-        latest_screen_contents = self.latest_screen_contents()
-        previous_gaze = latest_screen_contents.screen_coordinates
+        previous_gaze = screen_contents.screen_coordinates
         threshold_squared = (
-            _squared(latest_screen_contents.search_radius / 2.0)
-            if latest_screen_contents.search_radius
+            _squared(screen_contents.search_radius / 2.0)
+            if screen_contents.search_radius
             else 0.0
         )
         if (
@@ -981,7 +955,8 @@ class Controller:
             and previous_gaze
             and _distance_squared(current_gaze, previous_gaze) > threshold_squared
         ):
-            self.read_nearby()
+            return self.read_nearby()
+        return screen_contents
 
     def _plan_cursor_locations(
         self,
@@ -1136,6 +1111,7 @@ class Controller:
         self,
         disambiguate: bool,
         matches: Sequence[CursorLocation],
+        screen_contents: ScreenContents,
     ) -> Generator[Sequence[CursorLocation], CursorLocation, Optional[CursorLocation]]:
         if not matches:
             return None
@@ -1144,7 +1120,7 @@ class Controller:
         if disambiguate:
             return (yield matches)
         else:
-            return self.find_nearest_cursor_location(matches)
+            return self.find_nearest_cursor_location(matches, screen_contents)
 
     @staticmethod
     def _extract_result(generator):
