@@ -23,7 +23,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv.sources]
-screen-ocr = { path = "../screen_ocr", editable = true }
+screen-ocr = { path = "../screen-ocr", editable = true }
 
 [tool.ruff.lint]
 select = [
