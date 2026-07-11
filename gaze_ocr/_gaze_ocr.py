@@ -6,6 +6,7 @@ matches if disambiguation is needed. Resume computation with generator.send(matc
 completes, next() or send() will raise StopIteration with the .value set to the return value.
 """
 
+import logging
 import os.path
 import time
 from collections.abc import Callable, Generator, Sequence
@@ -118,6 +119,14 @@ class OcrCache:
             else:
                 return self._last_screen_contents
         else:
+            if self._last_screen_contents is not None:
+                logging.warning(
+                    "OCR cache miss with populated cache: requested_time_range=%r, "
+                    "cached_time_range=%r, requested_bounds=%r",
+                    time_range,
+                    self._last_time_range,
+                    bounding_box,
+                )
             self._last_time_range = time_range
             if bounding_box:
                 self._last_screen_contents = self.ocr_reader.read_screen(bounding_box)
