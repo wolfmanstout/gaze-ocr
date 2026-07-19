@@ -18,6 +18,9 @@ from screen_ocr import Reader, ScreenContents, WordLocation
 
 T = TypeVar("T")
 
+_populated_cache_call_count = 0
+_populated_cache_miss_count = 0
+
 
 @dataclass
 class CursorLocation:
@@ -106,6 +109,11 @@ class OcrCache:
         time_range: tuple[float, float],
         bounding_box: Optional[tuple[int, int, int, int]],
     ):
+        global _populated_cache_call_count, _populated_cache_miss_count
+
+        cache_was_populated = self._last_screen_contents is not None
+        if cache_was_populated:
+            _populated_cache_call_count += 1
         if (
             self._last_time_range
             and time_range[0] >= self._last_time_range[0]
@@ -119,13 +127,20 @@ class OcrCache:
             else:
                 return self._last_screen_contents
         else:
-            if self._last_screen_contents is not None:
+            if cache_was_populated:
+                _populated_cache_miss_count += 1
+                miss_percentage = (
+                    100 * _populated_cache_miss_count / _populated_cache_call_count
+                )
                 logging.warning(
                     "OCR cache miss with populated cache: requested_time_range=%r, "
-                    "cached_time_range=%r, requested_bounds=%r",
+                    "cached_time_range=%r, requested_bounds=%r; "
+                    "misses=%.1f%% of %d calls",
                     time_range,
                     self._last_time_range,
                     bounding_box,
+                    miss_percentage,
+                    _populated_cache_call_count,
                 )
             self._last_time_range = time_range
             if bounding_box:

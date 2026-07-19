@@ -6,6 +6,7 @@ from typing import cast
 import screen_ocr
 from screen_ocr import _base
 
+from gaze_ocr import _gaze_ocr
 from gaze_ocr._gaze_ocr import Controller, EyeTrackerFallback, OcrCache
 
 
@@ -98,16 +99,34 @@ def test_cache_hit_does_not_warn(caplog):
     assert not caplog.records
 
 
-def test_populated_cache_miss_warns(caplog):
-    reader = FakeReader()
-    cache = _cache(reader)
-    cache.read((1, 2), None)
+def test_populated_cache_miss_warns_with_process_lifetime_rate(caplog, monkeypatch):
+    monkeypatch.setattr(_gaze_ocr, "_populated_cache_call_count", 0)
+    monkeypatch.setattr(_gaze_ocr, "_populated_cache_miss_count", 0)
+
+    first_reader = FakeReader()
+    first_cache = _cache(first_reader)
+    first_cache.read((1, 4), None)
+    first_cache.read((2, 3), None)
+
+    second_reader = FakeReader()
+    second_cache = _cache(second_reader)
+    second_cache.read((10, 11), None)
 
     with caplog.at_level(logging.WARNING):
-        cache.read((3, 4), None)
+        first_cache.read((5, 6), None)
+        second_cache.read((12, 13), (0, 0, 10, 10))
 
-    assert len(caplog.records) == 1
-    assert "OCR cache miss with populated cache" in caplog.records[0].message
+    assert len(caplog.records) == 2
+    assert caplog.records[0].message == (
+        "OCR cache miss with populated cache: requested_time_range=(5, 6), "
+        "cached_time_range=(1, 4), requested_bounds=None; "
+        "misses=50.0% of 2 calls"
+    )
+    assert caplog.records[1].message == (
+        "OCR cache miss with populated cache: requested_time_range=(12, 13), "
+        "cached_time_range=(10, 11), requested_bounds=(0, 0, 10, 10); "
+        "misses=66.7% of 3 calls"
+    )
 
 
 def test_controller_start_reading_is_noop_and_reads_reuse_ocr_cache():
