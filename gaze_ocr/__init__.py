@@ -1,1 +1,1 @@
-from ._gaze_ocr import *  # noqa: F403
+from ._gaze_ocr import *

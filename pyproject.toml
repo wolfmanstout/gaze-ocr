@@ -26,21 +26,7 @@ build-backend = "hatchling.build"
 screen-ocr = { path = "../screen-ocr", editable = true }
 
 [tool.ruff.lint]
-select = [
-    # pycodestyle
-    "E",
-    # Pyflakes
-    "F",
-    # pyupgrade
-    "UP",
-    # flake8-bugbear
-    "B",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
-]
-ignore = ["E501", "SIM105", "SIM116", "UP045"]
+ignore = ["BLE001", "S110"]
 
 [dependency-groups]
 dev = ["pytest>=8.4.1"]
